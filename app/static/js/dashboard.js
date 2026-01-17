@@ -331,3 +331,5 @@ function updateCustomerInsights(data) {
     }, {responsive: true});
 }
 
+
+
