@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Retail Business Intelligence Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>📊 Retail Business Intelligence Dashboard</h1>
+            <p>ניתוח נתוני מכירות, רווחיות ומלאי</p>
+        </header>
+
+        <!-- Filters Sidebar -->
+        <aside class="sidebar">
+            <h2>🔍 מסננים</h2>
+            
+            <div class="filter-group">
+                <h3>טווח תאריכים</h3>
+                <label>תאריך התחלה:</label>
+                <input type="date" id="date_start" />
+                <label>תאריך סיום:</label>
+                <input type="date" id="date_end" />
+            </div>
+
+            <div class="filter-group">
+                <h3>סניפים</h3>
+                <select id="stores" multiple size="5"></select>
+            </div>
+
+            <div class="filter-group">
+                <h3>קטגוריות</h3>
+                <select id="categories" multiple size="5"></select>
+            </div>
+
+            <div class="filter-group">
+                <h3>אזורים</h3>
+                <select id="regions" multiple size="5"></select>
+            </div>
+
+            <button class="btn-primary" onclick="loadDashboard()">עדכן דשבורד</button>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- KPI Cards -->
+            <section class="section">
+                <h2>💰 מדדי ביצוע מרכזיים (KPIs)</h2>
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <h3>סך הכנסות</h3>
+                        <div class="kpi-value" id="total_revenue">₪0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <h3>סך רווח</h3>
+                        <div class="kpi-value" id="total_profit">₪0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <h3>שולי רווח</h3>
+                        <div class="kpi-value" id="profit_margin">0%</div>
+                    </div>
+                    <div class="kpi-card">
+                        <h3>ערך הזמנה ממוצע</h3>
+                        <div class="kpi-value" id="avg_order_value">₪0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <h3>סך עסקאות</h3>
+                        <div class="kpi-value" id="total_transactions">0</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sales Trends -->
+            <section class="section">
+                <h2>📈 מגמות מכירות</h2>
+                <div class="chart-container">
+                    <div id="revenue-trend" class="chart"></div>
+                    <div id="profit-trend" class="chart"></div>
+                </div>
+            </section>
+
+            <!-- Store Performance -->
+            <section class="section">
+                <h2>🏪 ביצועי סניפים</h2>
+                <div class="chart-container">
+                    <div id="store-revenue" class="chart"></div>
+                    <div id="store-margin" class="chart"></div>
+                </div>
+                <div id="store-table" class="table-container"></div>
+            </section>
+
+            <!-- Product Performance -->
+            <section class="section">
+                <h2>📦 ניתוח מוצרים וקטגוריות</h2>
+                <div class="chart-container">
+                    <div id="top-products" class="chart"></div>
+                    <div id="category-revenue" class="chart"></div>
+                </div>
+            </section>
+
+            <!-- Customer Insights -->
+            <section class="section">
+                <h2>👥 תובנות לקוחות</h2>
+                <div class="chart-container">
+                    <div id="age-revenue" class="chart"></div>
+                    <div id="gender-revenue" class="chart"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
+
