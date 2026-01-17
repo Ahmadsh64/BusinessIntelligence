@@ -280,5 +280,3 @@ def build_where_clause(date_start, date_end, stores, categories, regions):
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
 
-
-

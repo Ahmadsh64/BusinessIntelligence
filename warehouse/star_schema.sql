@@ -149,5 +149,3 @@ JOIN dim_product p ON f.product_id = p.product_id
 GROUP BY p.product_id, p.product_name, p.category, p.brand
 ORDER BY total_revenue DESC;
 
-
-

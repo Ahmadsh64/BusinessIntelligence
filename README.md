@@ -32,8 +32,7 @@ retail-bi-project/
 │   └── star_schema.sql     # Data Warehouse Schema
 │
 ├── app/
-│   ├── app.py              # Flask Web Application (ראשי)
-│   ├── streamlit_app.py    # Streamlit Application (אלטרנטיבה)
+│   ├── app.py              # Flask Web Application
 │   ├── templates/
 │   │   └── index.html      # HTML Template
 │   └── static/
@@ -58,8 +57,7 @@ retail-bi-project/
 - **SQL (MySQL)** - Data Warehouse
 
 ### Web Application
-- **Flask** - Web Framework (האפליקציה הראשית)
-- **Streamlit** - אלטרנטיבה (זמין גם כן)
+- **Flask** - Web Framework
 - **Plotly.js** - ויזואליזציה אינטראקטיבית בדפדפן
 - **HTML/CSS/JavaScript** - Frontend רגיל
 
@@ -81,7 +79,7 @@ pip install -r requirements.txt
 
 1. התקן MySQL Server אם עדיין לא מותקן
 2. צור משתמש MySQL (או השתמש ב-root)
-3. עדכן את פרטי החיבור ב-`etl/etl_pipeline.py` ו-`app/app.py` (או `app/streamlit_app.py` אם אתה משתמש ב-Streamlit):
+3. עדכן את פרטי החיבור ב-`etl/etl_pipeline.py` ו-`app/app.py`:
 
 ```python
 DB_CONFIG = {
@@ -123,7 +121,6 @@ python etl/etl_pipeline.py
 
 ### שלב 5: הפעלת Web Application
 
-#### אפשרות 1: Flask Web Application (מומלץ)
 הרץ את אפליקציית Flask:
 
 ```bash
@@ -132,15 +129,6 @@ python app.py
 ```
 
 האפליקציה תיפתח בדפדפן בכתובת: `http://localhost:5000`
-
-#### אפשרות 2: Streamlit (אלטרנטיבה)
-אם אתה מעדיף Streamlit:
-
-```bash
-streamlit run app/streamlit_app.py
-```
-
-האפליקציה תיפתח בדפדפן בכתובת: `http://localhost:8501`
 
 ## 📊 Data Warehouse Design (Star Schema)
 
@@ -227,9 +215,9 @@ streamlit run app/streamlit_app.py
 - ודא שקבצי Excel קיימים ב-`data/raw_excel/`
 - הרץ שוב את `generate_data.py` אם צריך
 
-### בעיות עם Streamlit
+### בעיות עם Flask
 - ודא שכל התלויות מותקנות: `pip install -r requirements.txt`
-- נסה להריץ: `streamlit --version`
+- נסה להריץ: `python -c "import flask; print(flask.__version__)"`
 
 ## 📝 הערות חשובות
 
@@ -260,4 +248,4 @@ streamlit run app/streamlit_app.py
 
 ---
 
-**נבנה עם ❤️ באמצעות Python, Streamlit, ו-MySQL**
+**נבנה עם ❤️ באמצעות Python, Flask, ו-MySQL**
