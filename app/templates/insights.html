@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}תובנות עסקיות - Retail BI{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <h1 class="display-4 mb-4">
+        <i class="bi bi-lightbulb"></i> תובנות עסקיות
+    </h1>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Dynamic Insights from API -->
+            <div id="dynamic-insights" class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h3><i class="bi bi-graph-up"></i> תובנות דינמיות</h3>
+                </div>
+                <div class="card-body">
+                    <div id="insights-content" class="loading">טוען תובנות...</div>
+                </div>
+            </div>
+
+            <!-- Static Insights -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="bi bi-file-text"></i> תובנות כלליות</h3>
+                </div>
+                <div class="card-body">
+                    {% include 'insights_content.html' %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Quick Stats -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h4><i class="bi bi-trophy"></i> נקודות עוצמה</h4>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="bi bi-check-circle text-success"></i> מגמות עונתיות חזקות</li>
+                        <li class="mb-2"><i class="bi bi-check-circle text-success"></i> מגוון קטגוריות מוצרים</li>
+                        <li class="mb-2"><i class="bi bi-check-circle text-success"></i> פיזור גיאוגרפי טוב</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Recommendations -->
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h4><i class="bi bi-exclamation-triangle"></i> המלצות</h4>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="bi bi-arrow-right-circle"></i> התמקדות בסניפים מובילים</li>
+                        <li class="mb-2"><i class="bi bi-arrow-right-circle"></i> אופטימיזציה של מלאי</li>
+                        <li class="mb-2"><i class="bi bi-arrow-right-circle"></i> שיפור שולי רווח</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Load dynamic insights
+    async function loadInsights() {
+        try {
+            const response = await fetch('/api/business-insights');
+            const data = await response.json();
+            
+            if (data.insights && data.insights.length > 0) {
+                let html = '<div class="list-group">';
+                data.insights.forEach(insight => {
+                    html += `
+                        <div class="list-group-item">
+                            <h5>${insight.title || 'תובנה'}</h5>
+                            <p>${insight.description || ''}</p>
+                            ${insight.metric ? `<small class="text-muted">${insight.metric}</small>` : ''}
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                document.getElementById('insights-content').innerHTML = html;
+            } else {
+                document.getElementById('insights-content').innerHTML = 
+                    '<p class="text-muted">אין תובנות זמינות כרגע</p>';
+            }
+        } catch (error) {
+            console.error('Error loading insights:', error);
+            document.getElementById('insights-content').innerHTML = 
+                '<p class="text-danger">שגיאה בטעינת תובנות</p>';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadInsights);
+</script>
+{% endblock %}
+

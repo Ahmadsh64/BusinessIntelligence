@@ -92,6 +92,24 @@ CREATE INDEX idx_fact_sales_store ON fact_sales(store_id);
 CREATE INDEX idx_fact_sales_product ON fact_sales(product_id);
 
 -- =====================================================
+-- USERS TABLE FOR AUTHENTICATION
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    store_id INT,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'store_manager',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (store_id) REFERENCES dim_store(store_id) ON DELETE SET NULL,
+    INDEX idx_username (username),
+    INDEX idx_store_id (store_id)
+);
+
+-- =====================================================
 -- VIEWS FOR COMMON QUERIES
 -- =====================================================
 

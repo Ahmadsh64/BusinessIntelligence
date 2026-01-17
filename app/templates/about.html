@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}אודות - Retail BI{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="display-4 mb-4">
+                <i class="bi bi-info-circle"></i> אודות הפרויקט
+            </h1>
+            
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h2 class="card-title">📊 Retail Business Intelligence</h2>
+                    <p class="card-text lead">
+                        מערכת Business Intelligence מתקדמת לניתוח נתוני מכירות, רווחיות ומלאי של רשת קמעונאות.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="bi bi-bullseye"></i> מטרת הפרויקט</h3>
+                </div>
+                <div class="card-body">
+                    <p>המערכת מספקת:</p>
+                    <ul>
+                        <li>✅ ניתוח מכירות, רווחיות ומלאי בזמן אמת</li>
+                        <li>✅ תמיכה בקבלת החלטות ניהוליות מבוססות נתונים</li>
+                        <li>✅ הצגת KPIs ותובנות עסקיות</li>
+                        <li>✅ חיזוי מכירות עתידיות באמצעות Machine Learning</li>
+                        <li>✅ ניתוח עונתי ומגמות</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="bi bi-code-slash"></i> טכנולוגיות</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Backend</h5>
+                            <ul>
+                                <li><strong>Python 3.8+</strong> - שפת תכנות ראשית</li>
+                                <li><strong>Flask</strong> - Web Framework</li>
+                                <li><strong>Pandas & NumPy</strong> - עיבוד נתונים</li>
+                                <li><strong>MySQL</strong> - Data Warehouse</li>
+                                <li><strong>scikit-learn</strong> - Machine Learning</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Frontend</h5>
+                            <ul>
+                                <li><strong>HTML5 & CSS3</strong> - מבנה ועיצוב</li>
+                                <li><strong>JavaScript</strong> - אינטראקטיביות</li>
+                                <li><strong>Plotly.js</strong> - ויזואליזציה</li>
+                                <li><strong>Bootstrap 5</strong> - עיצוב רספונסיבי</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="bi bi-diagram-3"></i> ארכיטקטורה</h3>
+                </div>
+                <div class="card-body">
+                    <h5>Data Pipeline</h5>
+                    <ol>
+                        <li><strong>Data Generation</strong> - יצירת נתונים סינתטיים עם Faker</li>
+                        <li><strong>ETL Pipeline</strong> - Extract, Transform, Load</li>
+                        <li><strong>Data Warehouse</strong> - Star Schema (Fact & Dimension Tables)</li>
+                        <li><strong>API Layer</strong> - RESTful APIs</li>
+                        <li><strong>Visualization</strong> - Dashboards אינטראקטיביים</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="bi bi-star"></i> תכונות מרכזיות</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul>
+                                <li>📊 Dashboards דינמיים</li>
+                                <li>📈 ניתוח מגמות</li>
+                                <li>🔮 חיזוי מכירות</li>
+                                <li>📅 ניתוח עונתי</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul>
+                                <li>🔍 פילטרים מתקדמים</li>
+                                <li>📤 ייצוא נתונים (CSV)</li>
+                                <li>🔎 חיפוש גלובלי</li>
+                                <li>📱 עיצוב רספונסיבי</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3><i class="bi bi-person-badge"></i> מיומנויות מדגימות</h3>
+                </div>
+                <div class="card-body">
+                    <p>פרויקט זה מדגים:</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-primary">Python</span>
+                        <span class="badge bg-primary">Data Analysis</span>
+                        <span class="badge bg-primary">SQL</span>
+                        <span class="badge bg-primary">ETL Pipelines</span>
+                        <span class="badge bg-primary">Web Development</span>
+                        <span class="badge bg-primary">Data Visualization</span>
+                        <span class="badge bg-primary">Machine Learning</span>
+                        <span class="badge bg-primary">Business Intelligence</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

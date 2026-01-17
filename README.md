@@ -119,6 +119,24 @@ python etl/etl_pipeline.py
 3. טעינת נתונים מ-Excel ל-SQL
 4. יצירת Views לשאילתות נפוצות
 
+### שלב 4.5: יצירת משתמשים למערכת
+
+יצירת משתמשים לכניסה למערכת:
+
+```bash
+python scripts/create_users.py
+```
+
+הסקריפט יוצר:
+- משתמש **admin** - גישה מלאה לכל הנתונים
+- משתמש לכל סניף - גישה רק לנתוני הסניף שלו
+
+**פרטי כניסה ברירת מחדל:**
+- Admin: `username=admin`, `password=admin123`
+- Store Managers: `username=store_X`, `password=storeX123` (X = store_id)
+
+⚠️ **חשוב**: שנה את הסיסמאות לאחר הכניסה הראשונה!
+
 ### שלב 5: הפעלת Web Application
 
 הרץ את אפליקציית Flask:

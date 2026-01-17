@@ -120,8 +120,64 @@ async function loadDashboard() {
         const customerData = await customerResponse.json();
         updateCustomerInsights(customerData);
         
+        // Load seasonal analysis
+        const seasonalResponse = await fetch(`/api/seasonal-analysis?${queryString}`);
+        const seasonalData = await seasonalResponse.json();
+        updateSeasonalAnalysis(seasonalData);
+        
+        // Load forecast
+        loadForecast();
+        
     } catch (error) {
         console.error('Error loading dashboard:', error);
+    }
+}
+
+// Load sales forecast
+async function loadForecast() {
+    const filters = getFilters();
+    const forecastMonths = document.getElementById('forecast-months')?.value || '6';
+    
+    // Use a date range that includes historical data (last 2 years)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - 2);
+    
+    // Override filters with historical date range for forecast
+    const forecastFilters = {
+        ...filters,
+        dateStart: startDate.toISOString().split('T')[0],
+        dateEnd: endDate.toISOString().split('T')[0],
+        months: forecastMonths
+    };
+    
+    const queryString = buildQueryString(forecastFilters);
+    
+    try {
+        const response = await fetch(`/api/sales-forecast?${queryString}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            if (document.getElementById('forecast-chart')) {
+                document.getElementById('forecast-chart').innerHTML = 
+                    `<div class="loading">${errorData.error || 'שגיאה בטעינת חיזוי'}</div>`;
+            }
+            return;
+        }
+        const data = await response.json();
+        if (data.error) {
+            if (document.getElementById('forecast-chart')) {
+                document.getElementById('forecast-chart').innerHTML = 
+                    `<div class="loading">${data.error}</div>`;
+            }
+            return;
+        }
+        updateForecast(data);
+    } catch (error) {
+        console.error('Error loading forecast:', error);
+        if (document.getElementById('forecast-chart')) {
+            document.getElementById('forecast-chart').innerHTML = 
+                `<div class="loading">שגיאה בטעינת חיזוי: ${error.message}</div>`;
+        }
     }
 }
 
@@ -329,5 +385,168 @@ function updateCustomerInsights(data) {
         font: { family: 'Arial', size: 12 },
         height: 350
     }, {responsive: true});
+}
+
+// Update seasonal analysis charts
+function updateSeasonalAnalysis(data) {
+    if (!data || !data.quarterly || data.quarterly.length === 0) return;
+    
+    // Quarterly trend
+    const quarters = data.quarterly.map(d => `${d.year} ${d.quarter_name}`);
+    const qRevenue = data.quarterly.map(d => d.revenue);
+    const qProfit = data.quarterly.map(d => d.profit);
+    
+    if (document.getElementById('quarterly-trend')) {
+        Plotly.newPlot('quarterly-trend', [
+            {
+                x: quarters,
+                y: qRevenue,
+                type: 'bar',
+                name: 'הכנסות',
+                marker: { color: '#667eea' }
+            },
+            {
+                x: quarters,
+                y: qProfit,
+                type: 'bar',
+                name: 'רווח',
+                marker: { color: '#48bb78' }
+            }
+        ], {
+            title: 'מגמות רבעוניות',
+            xaxis: { title: 'רבעון' },
+            yaxis: { title: 'סכום (₪)' },
+            barmode: 'group',
+            font: { family: 'Arial', size: 12 },
+            height: 400
+        }, {responsive: true});
+    }
+    
+    // Monthly pattern (average across years)
+    if (data.monthly && data.monthly.length > 0 && document.getElementById('monthly-pattern')) {
+        const months = data.monthly.map(d => d.month_name);
+        const avgRevenue = data.monthly.map(d => d.avg_revenue);
+        
+        Plotly.newPlot('monthly-pattern', [{
+            x: months,
+            y: avgRevenue,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'הכנסה ממוצעת',
+            line: { color: '#ed8936', width: 3, shape: 'spline' },
+            marker: { size: 10 }
+        }], {
+            title: 'דפוס חודשי ממוצע (על פני שנים)',
+            xaxis: { title: 'חודש' },
+            yaxis: { title: 'הכנסה ממוצעת (₪)' },
+            font: { family: 'Arial', size: 12 },
+            height: 400
+        }, {responsive: true});
+    }
+    
+    // Display insights
+    if (data.insights && data.insights.length > 0 && document.getElementById('seasonal-insights')) {
+        let insightsHTML = '<h3>💡 תובנות עונתיות:</h3><ul>';
+        data.insights.forEach(insight => {
+            if (insight.type === 'peak_month') {
+                insightsHTML += `<li><strong>חודש שיא:</strong> ${insight.month} - 
+                    הכנסות של ₪${Number(insight.revenue).toLocaleString('he-IL', {maximumFractionDigits: 0})} 
+                    (${insight.percentage_above_avg.toFixed(1)}% מעל הממוצע)</li>`;
+            } else if (insight.type === 'low_month') {
+                insightsHTML += `<li><strong>חודש נמוך:</strong> ${insight.month} - 
+                    הכנסות של ₪${Number(insight.revenue).toLocaleString('he-IL', {maximumFractionDigits: 0})} 
+                    (${insight.percentage_below_avg.toFixed(1)}% מתחת לממוצע)</li>`;
+            }
+        });
+        insightsHTML += '</ul>';
+        document.getElementById('seasonal-insights').innerHTML = insightsHTML;
+    }
+}
+
+// Update forecast chart
+function updateForecast(data) {
+    if (!data || !data.historical || !data.forecast || !document.getElementById('forecast-chart')) return;
+    
+    // Combine historical and forecast
+    const allData = [...data.historical, ...data.forecast];
+    const labels = allData.map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
+    const revenue = allData.map(d => d.revenue);
+    const profit = allData.map(d => d.profit);
+    const isForecast = allData.map(d => d.is_forecast || false);
+    
+    // Create traces
+    const traces = [
+        {
+            x: labels,
+            y: revenue,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'הכנסות',
+            line: { color: '#667eea', width: 3 },
+            marker: { 
+                size: 8,
+                color: isForecast.map(f => f ? '#ff6b6b' : '#667eea')
+            }
+        },
+        {
+            x: labels,
+            y: profit,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'רווח',
+            line: { color: '#48bb78', width: 3 },
+            marker: { 
+                size: 8,
+                color: isForecast.map(f => f ? '#ff6b6b' : '#48bb78')
+            }
+        }
+    ];
+    
+    // Add vertical line separating historical from forecast
+    const forecastStart = data.historical.length;
+    const maxRevenue = Math.max(...revenue);
+    const shapes = [{
+        type: 'line',
+        x0: labels[forecastStart - 1],
+        x1: labels[forecastStart - 1],
+        y0: 0,
+        y1: maxRevenue,
+        line: {
+            color: '#ff6b6b',
+            width: 2,
+            dash: 'dash'
+        }
+    }];
+    
+    const annotations = [{
+        x: labels[forecastStart],
+        y: maxRevenue * 0.9,
+        text: 'תחילת חיזוי',
+        showarrow: true,
+        arrowhead: 2,
+        ax: 0,
+        ay: -40
+    }];
+    
+    Plotly.newPlot('forecast-chart', traces, {
+        title: 'חיזוי מכירות עתידי',
+        xaxis: { title: 'חודש' },
+        yaxis: { title: 'סכום (₪)' },
+        shapes: shapes,
+        annotations: annotations,
+        font: { family: 'Arial', size: 12 },
+        height: 500
+    }, {responsive: true});
+    
+    // Display accuracy
+    if (data.model_accuracy && document.getElementById('forecast-accuracy')) {
+        const accuracyHTML = `
+            <h3>📊 דיוק המודל:</h3>
+            <p><strong>דיוק חיזוי הכנסות (R²):</strong> ${(data.model_accuracy.revenue_r2 * 100).toFixed(1)}%</p>
+            <p><strong>דיוק חיזוי רווח (R²):</strong> ${(data.model_accuracy.profit_r2 * 100).toFixed(1)}%</p>
+            <p class="note">* R² של 1.0 = חיזוי מושלם, 0.0 = חיזוי אקראי</p>
+        `;
+        document.getElementById('forecast-accuracy').innerHTML = accuracyHTML;
+    }
 }
 

@@ -1,20 +1,32 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 Retail Business Intelligence Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-</head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <h1>📊 Retail Business Intelligence Dashboard</h1>
-            <p>ניתוח נתוני מכירות, רווחיות ומלאי</p>
-        </header>
+{% extends "base.html" %}
 
+{% block title %}📊 דשבורד - Retail BI{% endblock %}
+
+{% block content %}
+    <div class="container-fluid py-4">
+        <!-- Page Header -->
+        <div class="page-header mb-4">
+            <h1 class="display-4">
+                <i class="bi bi-speedometer2"></i> דשבורד BI
+            </h1>
+            <p class="lead">ניתוח נתוני מכירות, רווחיות ומלאי בזמן אמת</p>
+            <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-success" onclick="exportToCSV()">
+                    <i class="bi bi-download"></i> ייצא ל-CSV
+                </button>
+                <button class="btn btn-primary" onclick="shareDashboard()">
+                    <i class="bi bi-share"></i> שתף דשבורד
+                </button>
+                {% if session.get('role') == 'store_manager' %}
+                <div class="alert alert-info mb-0 d-flex align-items-center" role="alert">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <small>אתה רואה רק את נתוני הסניף שלך (סניף {{ session.get('store_id') }})</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="dashboard-container">
         <!-- Filters Sidebar -->
         <aside class="sidebar">
             <h2>🔍 מסננים</h2>
@@ -110,10 +122,89 @@
                     <div id="gender-revenue" class="chart"></div>
                 </div>
             </section>
-        </main>
-    </div>
 
+            <!-- Seasonal Analysis -->
+            <section class="section">
+                <h2>📅 ניתוח עונתי</h2>
+                <div class="chart-container">
+                    <div id="quarterly-trend" class="chart"></div>
+                    <div id="monthly-pattern" class="chart"></div>
+                </div>
+                <div id="seasonal-insights" class="insights-box"></div>
+            </section>
+
+            <!-- Sales Forecasting -->
+            <section class="section">
+                <h2>🔮 חיזוי מכירות</h2>
+                <div class="forecast-controls">
+                    <label>מספר חודשים לחיזוי:</label>
+                    <select id="forecast-months" onchange="loadForecast()">
+                        <option value="3">3 חודשים</option>
+                        <option value="6" selected>6 חודשים</option>
+                        <option value="12">12 חודשים</option>
+                    </select>
+                </div>
+                <div id="forecast-chart" class="chart" style="min-height: 500px;"></div>
+                <div id="forecast-accuracy" class="accuracy-box"></div>
+            </section>
+        </main>
+        </div>
+{% endblock %}
+
+{% block extra_scripts %}
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
-</body>
-</html>
+    <script>
+        // Export to CSV functionality
+        async function exportToCSV() {
+            const filters = getFilters();
+            const queryString = buildQueryString(filters);
+            
+            try {
+                const response = await fetch(`/api/export-csv?${queryString}`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `retail_bi_export_${new Date().toISOString().split('T')[0]}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+                    alert('שגיאה בייצוא הנתונים');
+                }
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('שגיאה בייצוא הנתונים');
+            }
+        }
+
+        // Share dashboard functionality
+        function shareDashboard() {
+            const filters = getFilters();
+            const params = new URLSearchParams();
+            if (filters.dateStart) params.append('date_start', filters.dateStart);
+            if (filters.dateEnd) params.append('date_end', filters.dateEnd);
+            if (filters.stores) params.append('stores', filters.stores);
+            if (filters.categories) params.append('categories', filters.categories);
+            if (filters.regions) params.append('regions', filters.regions);
+            
+            const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Retail BI Dashboard',
+                    text: 'צפה בדשבורד BI',
+                    url: shareUrl
+                });
+            } else {
+                // Fallback: copy to clipboard
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                    alert('הקישור הועתק ללוח!');
+                });
+            }
+        }
+    </script>
+{% endblock %}
 

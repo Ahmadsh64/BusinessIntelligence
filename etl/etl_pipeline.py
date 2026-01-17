@@ -102,37 +102,166 @@ def extract_excel_data():
         return None, None, None, None
 
 def validate_data(df_stores, df_products, df_customers, df_sales):
-    """Validate and clean data"""
+    """Validate and clean data with comprehensive data quality checks"""
     print("\n" + "="*50)
     print("VALIDATING AND CLEANING DATA")
     print("="*50)
     
+    quality_report = {
+        'missing_values': {},
+        'duplicates': {},
+        'outliers': {},
+        'data_types': {},
+        'business_rules': {}
+    }
+    
     # Check for missing values
-    print("\nChecking for missing values...")
+    print("\n[1/5] Checking for missing values...")
     for name, df in [('Stores', df_stores), ('Products', df_products), 
                      ('Customers', df_customers), ('Sales', df_sales)]:
         missing = df.isnull().sum()
         if missing.any():
-            print(f"  {name} - Missing values found:")
-            print(f"    {missing[missing > 0]}")
+            print(f"  ⚠ {name} - Missing values found:")
+            for col, count in missing[missing > 0].items():
+                print(f"    - {col}: {count} ({count/len(df)*100:.1f}%)")
+            quality_report['missing_values'][name] = missing[missing > 0].to_dict()
         else:
             print(f"  ✓ {name} - No missing values")
+            quality_report['missing_values'][name] = {}
     
-    # Clean sales data
-    print("\nCleaning sales data...")
-    # Remove rows with negative values
+    # Check for duplicates
+    print("\n[2/5] Checking for duplicates...")
+    for name, df, key_col in [('Stores', df_stores, 'store_id'),
+                              ('Products', df_products, 'product_id'),
+                              ('Customers', df_customers, 'customer_id'),
+                              ('Sales', df_sales, 'sale_id')]:
+        duplicates = df.duplicated(subset=[key_col]).sum()
+        if duplicates > 0:
+            print(f"  ⚠ {name} - Found {duplicates} duplicate {key_col}s")
+            quality_report['duplicates'][name] = duplicates
+            # Remove duplicates, keep first
+            df = df.drop_duplicates(subset=[key_col], keep='first')
+            if name == 'Stores':
+                df_stores = df
+            elif name == 'Products':
+                df_products = df
+            elif name == 'Customers':
+                df_customers = df
+            else:
+                df_sales = df
+        else:
+            print(f"  ✓ {name} - No duplicates")
+            quality_report['duplicates'][name] = 0
+    
+    # Check for outliers (using IQR method)
+    print("\n[3/5] Checking for outliers...")
+    if 'revenue' in df_sales.columns:
+        Q1 = df_sales['revenue'].quantile(0.25)
+        Q3 = df_sales['revenue'].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        
+        outliers = df_sales[(df_sales['revenue'] < lower_bound) | 
+                            (df_sales['revenue'] > upper_bound)]
+        outlier_count = len(outliers)
+        
+        if outlier_count > 0:
+            print(f"  ⚠ Sales - Found {outlier_count} revenue outliers ({outlier_count/len(df_sales)*100:.1f}%)")
+            print(f"    Range: {lower_bound:.2f} - {upper_bound:.2f}")
+            quality_report['outliers']['Sales'] = {
+                'count': outlier_count,
+                'percentage': outlier_count/len(df_sales)*100
+            }
+        else:
+            print(f"  ✓ Sales - No significant outliers")
+            quality_report['outliers']['Sales'] = {'count': 0, 'percentage': 0}
+    
+    # Validate data types
+    print("\n[4/5] Validating data types...")
+    df_sales['sale_date'] = pd.to_datetime(df_sales['sale_date'], errors='coerce')
+    invalid_dates = df_sales['sale_date'].isna().sum()
+    if invalid_dates > 0:
+        print(f"  ⚠ Sales - {invalid_dates} invalid dates found")
+        df_sales = df_sales[df_sales['sale_date'].notna()]
+    else:
+        print(f"  ✓ Sales - All dates are valid")
+    
+    # Business rules validation
+    print("\n[5/5] Validating business rules...")
     initial_count = len(df_sales)
+    
+    # Rule 1: Revenue must be positive
     df_sales = df_sales[df_sales['revenue'] > 0]
+    removed_negative = initial_count - len(df_sales)
+    
+    # Rule 2: Quantity must be positive
     df_sales = df_sales[df_sales['quantity'] > 0]
-    removed = initial_count - len(df_sales)
-    if removed > 0:
-        print(f"  Removed {removed} invalid sales records")
+    removed_zero_qty = initial_count - (removed_negative + len(df_sales))
     
-    # Ensure date is datetime
-    df_sales['sale_date'] = pd.to_datetime(df_sales['sale_date'])
+    # Rule 3: Profit should be <= Revenue (cost can't be negative)
+    df_sales = df_sales[df_sales['profit'] <= df_sales['revenue']]
+    removed_invalid_profit = initial_count - (removed_negative + removed_zero_qty + len(df_sales))
     
-    print("✓ Data validation completed")
+    # Rule 4: Check referential integrity (will be done later in transform)
+    
+    total_removed = removed_negative + removed_zero_qty + removed_invalid_profit
+    if total_removed > 0:
+        print(f"  ⚠ Removed {total_removed} records violating business rules:")
+        if removed_negative > 0:
+            print(f"    - {removed_negative} records with negative/zero revenue")
+        if removed_zero_qty > 0:
+            print(f"    - {removed_zero_qty} records with zero/negative quantity")
+        if removed_invalid_profit > 0:
+            print(f"    - {removed_invalid_profit} records with invalid profit")
+        
+        quality_report['business_rules'] = {
+            'removed_negative_revenue': int(removed_negative),
+            'removed_zero_quantity': int(removed_zero_qty),
+            'removed_invalid_profit': int(removed_invalid_profit),
+            'total_removed': int(total_removed)
+        }
+    else:
+        print(f"  ✓ All records pass business rules")
+        quality_report['business_rules'] = {'total_removed': 0}
+    
+    # Data quality summary
+    print("\n" + "-"*50)
+    print("DATA QUALITY SUMMARY")
+    print("-"*50)
+    print(f"Total records after cleaning: {len(df_sales):,}")
+    print(f"Data quality score: {calculate_quality_score(quality_report):.1f}%")
+    print("-"*50)
+    
+    print("\n✓ Data validation completed")
     return df_stores, df_products, df_customers, df_sales
+
+def calculate_quality_score(quality_report):
+    """Calculate overall data quality score (0-100)"""
+    score = 100
+    
+    # Deduct points for missing values
+    for table, missing in quality_report['missing_values'].items():
+        if missing:
+            score -= min(20, sum(missing.values()) * 0.1)
+    
+    # Deduct points for duplicates
+    for table, dup_count in quality_report['duplicates'].items():
+        if dup_count > 0:
+            score -= min(15, dup_count * 0.1)
+    
+    # Deduct points for outliers (if excessive)
+    if 'Sales' in quality_report['outliers']:
+        outlier_pct = quality_report['outliers']['Sales'].get('percentage', 0)
+        if outlier_pct > 5:  # More than 5% outliers
+            score -= min(10, (outlier_pct - 5) * 0.5)
+    
+    # Deduct points for business rule violations
+    total_removed = quality_report['business_rules'].get('total_removed', 0)
+    if total_removed > 0:
+        score -= min(15, total_removed * 0.01)
+    
+    return max(0, score)
 
 def transform_data(df_stores, df_products, df_customers, df_sales):
     """Transform data for Data Warehouse"""
