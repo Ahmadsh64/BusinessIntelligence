@@ -10,12 +10,14 @@ import pandas as pd
 import numpy as np
 import mysql.connector
 from mysql.connector import Error, IntegrityError
+from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 import json
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.cluster import KMeans
 
 app = Flask(__name__)
 CORS(app)
@@ -31,6 +33,13 @@ DB_CONFIG = {
     'charset': 'utf8mb4'
 }
 
+# SQLAlchemy engine (for pandas read_sql)
+SQLALCHEMY_DB_URI = (
+    f"mysql+mysqlconnector://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
+    f"@{DB_CONFIG['host']}/{DB_CONFIG['database']}?charset={DB_CONFIG['charset']}"
+)
+_sqlalchemy_engine = create_engine(SQLALCHEMY_DB_URI, pool_pre_ping=True)
+
 def get_db_connection():
     """Create database connection"""
     try:
@@ -42,17 +51,60 @@ def get_db_connection():
 
 def execute_query(query):
     """Execute SQL query and return DataFrame"""
+    try:
+        with _sqlalchemy_engine.connect() as connection:
+            return pd.read_sql(query, connection)
+    except Exception as e:
+        print(f"Query error: {e}")
+        return pd.DataFrame()
+
+def table_exists(table_name):
+    """Check if a table exists in the database."""
     connection = get_db_connection()
-    if connection:
-        try:
-            df = pd.read_sql(query, connection)
-            connection.close()
-            return df
-        except Exception as e:
-            print(f"Query error: {e}")
-            connection.close()
-            return pd.DataFrame()
-    return pd.DataFrame()
+    if not connection:
+        return False
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_schema = %s AND table_name = %s
+            """,
+            (DB_CONFIG['database'], table_name)
+        )
+        exists = cursor.fetchone()[0] > 0
+        cursor.close()
+        connection.close()
+        return exists
+    except Error as e:
+        print(f"Table check error: {e}")
+        connection.close()
+        return False
+
+def column_exists(table_name, column_name):
+    """Check if a column exists in a table."""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s AND column_name = %s
+            """,
+            (DB_CONFIG['database'], table_name, column_name)
+        )
+        exists = cursor.fetchone()[0] > 0
+        cursor.close()
+        connection.close()
+        return exists
+    except Error as e:
+        print(f"Column check error: {e}")
+        connection.close()
+        return False
 
 # ==================== AUTHENTICATION ====================
 
@@ -772,13 +824,286 @@ def change_password():
             return jsonify({'error': 'שגיאה בשינוי סיסמה'}), 500
     return jsonify({'error': 'שגיאה בהתחברות'}), 500
 
+@app.route('/api/notifications', methods=['GET'])
+@login_required
+def get_notifications():
+    """Get notifications for current user"""
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+    user_store_id = session.get('store_id')
+    
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor(dictionary=True)
+            
+            # Build query based on user role
+            if user_role == 'admin':
+                query = """
+                    SELECT 
+                        n.notification_id,
+                        n.type,
+                        n.title,
+                        n.message,
+                        n.severity,
+                        n.is_read,
+                        n.created_at,
+                        s.store_name
+                    FROM notifications n
+                    LEFT JOIN dim_store s ON n.store_id = s.store_id
+                    WHERE n.user_id IS NULL OR n.user_id = %s
+                    ORDER BY n.created_at DESC
+                    LIMIT 50
+                """
+                cursor.execute(query, (user_id,))
+            else:
+                # Store managers see only their store notifications
+                query = """
+                    SELECT 
+                        n.notification_id,
+                        n.type,
+                        n.title,
+                        n.message,
+                        n.severity,
+                        n.is_read,
+                        n.created_at,
+                        s.store_name
+                    FROM notifications n
+                    LEFT JOIN dim_store s ON n.store_id = s.store_id
+                    WHERE (n.user_id IS NULL OR n.user_id = %s)
+                    AND (n.store_id IS NULL OR n.store_id = %s)
+                    ORDER BY n.created_at DESC
+                    LIMIT 50
+                """
+                cursor.execute(query, (user_id, user_store_id))
+            
+            notifications = cursor.fetchall()
+            
+            # Convert datetime to string
+            for notif in notifications:
+                if notif['created_at']:
+                    notif['created_at'] = notif['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Count unread
+            unread_count = sum(1 for n in notifications if not n['is_read'])
+            
+            cursor.close()
+            connection.close()
+            
+            return jsonify({
+                'notifications': notifications,
+            
+                'unread_count': unread_count
+            })
+        except Error as e:
+            print(f"Database error: {e}")
+            connection.close()
+            return jsonify({'error': 'שגיאה בטעינת התראות'}), 500
+    return jsonify({'error': 'שגיאה בהתחברות'}), 500
+
+@app.route('/api/notifications/<int:notification_id>/read', methods=['PUT'])
+@login_required
+def mark_notification_read(notification_id):
+    """Mark notification as read"""
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                "UPDATE notifications SET is_read = TRUE WHERE notification_id = %s",
+                (notification_id,)
+            )
+            connection.commit()
+            cursor.close()
+            connection.close()
+            
+            return jsonify({'success': True})
+        except Error as e:
+            print(f"Database error: {e}")
+            connection.close()
+            return jsonify({'error': 'שגיאה בעדכון התראה'}), 500
+    return jsonify({'error': 'שגיאה בהתחברות'}), 500
+
+@app.route('/api/notifications/read-all', methods=['PUT'])
+@login_required
+def mark_all_notifications_read():
+    """Mark all notifications as read"""
+    user_id = session.get('user_id')
+    
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                "UPDATE notifications SET is_read = TRUE WHERE user_id = %s OR user_id IS NULL",
+                (user_id,)
+            )
+            connection.commit()
+            cursor.close()
+            connection.close()
+            
+            return jsonify({'success': True})
+        except Error as e:
+            print(f"Database error: {e}")
+            connection.close()
+            return jsonify({'error': 'שגיאה בעדכון התראות'}), 500
+    return jsonify({'error': 'שגיאה בהתחברות'}), 500
+
+@app.route('/api/anomaly-detection', methods=['GET'])
+@login_required
+def detect_anomalies():
+    """Detect anomalies in sales data"""
+    date_start = request.args.get('date_start', '2023-01-01')
+    date_end = request.args.get('date_end', datetime.now().strftime('%Y-%m-%d'))
+    
+    where_clause = build_where_clause(date_start, date_end, '', '', '', restrict_to_store=True)
+    
+    # Get daily sales data
+    query = f"""
+    SELECT 
+        d.date,
+        SUM(f.revenue) AS daily_revenue,
+        SUM(f.quantity) AS daily_quantity,
+        COUNT(DISTINCT f.sale_id) AS daily_transactions
+    FROM fact_sales f
+    JOIN dim_date d ON f.date_id = d.date_id
+    JOIN dim_store s ON f.store_id = s.store_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    WHERE 1=1 {where_clause}
+    GROUP BY d.date
+    ORDER BY d.date
+    """
+    
+    df = execute_query(query)
+    
+    if df.empty or len(df) < 7:
+        return jsonify({'anomalies': [], 'message': 'לא מספיק נתונים לזיהוי אנומליות'})
+    
+    anomalies = []
+    
+    # Calculate statistics
+    mean_revenue = df['daily_revenue'].mean()
+    std_revenue = df['daily_revenue'].std()
+    
+    # Detect outliers (beyond 2 standard deviations)
+    threshold = 2 * std_revenue
+    
+    for _, row in df.iterrows():
+        if abs(row['daily_revenue'] - mean_revenue) > threshold:
+            anomalies.append({
+                'date': row['date'].strftime('%Y-%m-%d'),
+                'revenue': float(row['daily_revenue']),
+                'expected_revenue': float(mean_revenue),
+                'deviation': float((row['daily_revenue'] - mean_revenue) / mean_revenue * 100),
+                'type': 'high' if row['daily_revenue'] > mean_revenue else 'low'
+            })
+    
+    return jsonify({
+        'anomalies': anomalies,
+        'statistics': {
+            'mean_revenue': float(mean_revenue),
+            'std_revenue': float(std_revenue),
+            'total_days': len(df)
+        }
+    })
+
+@app.route('/api/customer-segments', methods=['GET'])
+@login_required
+def get_customer_segments():
+    """Segment customers using KMeans clustering"""
+    date_start = request.args.get('date_start', '2023-01-01')
+    date_end = request.args.get('date_end', datetime.now().strftime('%Y-%m-%d'))
+    n_clusters = int(request.args.get('clusters', 4))
+
+    where_clause = build_where_clause(date_start, date_end, '', '', '', restrict_to_store=True)
+
+    query = f"""
+    SELECT 
+        c.customer_id,
+        c.age_group,
+        c.gender,
+        COUNT(DISTINCT f.sale_id) AS transactions,
+        SUM(f.revenue) AS total_revenue,
+        AVG(f.revenue) AS avg_order_value,
+        SUM(f.quantity) AS total_quantity
+    FROM fact_sales f
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    JOIN dim_date d ON f.date_id = d.date_id
+    JOIN dim_store s ON f.store_id = s.store_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    WHERE 1=1 {where_clause}
+    GROUP BY c.customer_id, c.age_group, c.gender
+    """
+
+    df = execute_query(query)
+
+    if df.empty or len(df) < n_clusters:
+        return jsonify({
+            'segments': [],
+            'message': 'לא מספיק נתונים לחלוקה לקבוצות'
+        })
+
+    features = df[['transactions', 'total_revenue', 'avg_order_value', 'total_quantity']].fillna(0)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(features)
+
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    df['segment'] = kmeans.fit_predict(X)
+
+    # Build summary per segment
+    segment_summary = df.groupby('segment').agg({
+        'customer_id': 'count',
+        'transactions': 'mean',
+        'total_revenue': 'mean',
+        'avg_order_value': 'mean',
+        'total_quantity': 'mean'
+    }).reset_index()
+
+    segment_summary.rename(columns={
+        'customer_id': 'customers_count',
+        'transactions': 'avg_transactions',
+        'total_revenue': 'avg_revenue',
+        'avg_order_value': 'avg_order_value',
+        'total_quantity': 'avg_quantity'
+    }, inplace=True)
+
+    return jsonify({
+        'segments': segment_summary.to_dict(orient='records'),
+        'customers': df[['customer_id', 'age_group', 'gender', 'segment']].to_dict(orient='records')
+    })
+
 @app.route('/api/filters', methods=['GET'])
 @login_required
 def get_filters():
     """Get filter options"""
-    stores_query = "SELECT DISTINCT store_id, store_name, city FROM dim_store ORDER BY store_name"
-    categories_query = "SELECT DISTINCT category FROM dim_product ORDER BY category"
-    regions_query = "SELECT DISTINCT region FROM dim_store ORDER BY region"
+    user_role = get_current_user_role()
+    user_store_id = get_current_user_store_id()
+
+    if user_role != 'admin' and user_store_id:
+        stores_query = f"""
+        SELECT DISTINCT store_id, store_name, city
+        FROM dim_store
+        WHERE store_id = {user_store_id}
+        ORDER BY store_name
+        """
+        categories_query = f"""
+        SELECT DISTINCT p.category
+        FROM fact_sales f
+        JOIN dim_product p ON f.product_id = p.product_id
+        JOIN dim_store s ON f.store_id = s.store_id
+        WHERE s.store_id = {user_store_id}
+        ORDER BY p.category
+        """
+        regions_query = f"""
+        SELECT DISTINCT region
+        FROM dim_store
+        WHERE store_id = {user_store_id}
+        ORDER BY region
+        """
+    else:
+        stores_query = "SELECT DISTINCT store_id, store_name, city FROM dim_store ORDER BY store_name"
+        categories_query = "SELECT DISTINCT category FROM dim_product ORDER BY category"
+        regions_query = "SELECT DISTINCT region FROM dim_store ORDER BY region"
     
     df_stores = execute_query(stores_query)
     df_categories = execute_query(categories_query)
@@ -789,6 +1114,302 @@ def get_filters():
         'categories': df_categories['category'].tolist(),
         'regions': df_regions['region'].tolist()
     })
+
+@app.route('/api/inventory-optimization', methods=['GET'])
+@login_required
+def inventory_optimization():
+    """Calculate optimal inventory levels (EOQ + Reorder Point)."""
+    days_back = int(request.args.get('days', 60))
+    lead_time_days = int(request.args.get('lead_time_days', 7))
+    holding_cost_rate = float(request.args.get('holding_cost_rate', 0.2))  # % of unit cost per year
+    ordering_cost = float(request.args.get('ordering_cost', 50))  # fixed cost per order
+    update_levels = request.args.get('update', 'false').lower() == 'true'
+
+    user_role = get_current_user_role()
+    user_store_id = get_current_user_store_id()
+
+    store_filter = ""
+    if user_role != 'admin' and user_store_id:
+        store_filter = f"AND s.store_id = {user_store_id}"
+
+    inventory_table_ready = table_exists('inventory_levels') and column_exists('inventory_levels', 'current_quantity')
+
+    if inventory_table_ready:
+        query = f"""
+        SELECT 
+            s.store_id,
+            s.store_name,
+            p.product_id,
+            p.product_name,
+            p.cost AS unit_cost,
+            SUM(f.quantity) AS total_qty,
+            COUNT(DISTINCT d.date) AS sales_days,
+            COALESCE(i.current_quantity, 0) AS current_stock
+        FROM fact_sales f
+        JOIN dim_store s ON f.store_id = s.store_id
+        JOIN dim_product p ON f.product_id = p.product_id
+        JOIN dim_date d ON f.date_id = d.date_id
+        LEFT JOIN inventory_levels i 
+            ON i.store_id = s.store_id AND i.product_id = p.product_id
+        WHERE d.date >= DATE_SUB(CURDATE(), INTERVAL {days_back} DAY)
+        {store_filter}
+        GROUP BY s.store_id, s.store_name, p.product_id, p.product_name, p.cost, i.current_quantity
+        """
+    else:
+        query = f"""
+        SELECT 
+            s.store_id,
+            s.store_name,
+            p.product_id,
+            p.product_name,
+            p.cost AS unit_cost,
+            SUM(f.quantity) AS total_qty,
+            COUNT(DISTINCT d.date) AS sales_days,
+            0 AS current_stock
+        FROM fact_sales f
+        JOIN dim_store s ON f.store_id = s.store_id
+        JOIN dim_product p ON f.product_id = p.product_id
+        JOIN dim_date d ON f.date_id = d.date_id
+        WHERE d.date >= DATE_SUB(CURDATE(), INTERVAL {days_back} DAY)
+        {store_filter}
+        GROUP BY s.store_id, s.store_name, p.product_id, p.product_name, p.cost
+        """
+
+    df = execute_query(query)
+
+    if df.empty:
+        return jsonify({'items': [], 'message': 'אין נתונים לחישוב מלאי'}), 200
+
+    results = []
+    if update_levels and not inventory_table_ready:
+        update_levels = False
+
+    connection = get_db_connection() if update_levels else None
+    cursor = connection.cursor() if connection else None
+
+    for _, row in df.iterrows():
+        if row['sales_days'] == 0:
+            continue
+
+        daily_demand = row['total_qty'] / max(row['sales_days'], 1)
+        annual_demand = daily_demand * 365
+        holding_cost = max(row['unit_cost'], 1) * holding_cost_rate
+
+        # EOQ formula
+        eoq = int(max(1, (2 * annual_demand * ordering_cost / max(holding_cost, 1)) ** 0.5))
+
+        # Reorder point (basic): demand during lead time + safety stock (10% buffer)
+        reorder_point = int(daily_demand * lead_time_days * 1.1)
+
+        # Suggested min/max levels
+        min_level = max(1, int(reorder_point * 0.8))
+        max_level = int(reorder_point + eoq)
+
+        results.append({
+            'store_id': int(row['store_id']),
+            'store_name': row['store_name'],
+            'product_id': int(row['product_id']),
+            'product_name': row['product_name'],
+            'current_stock': int(row['current_stock']),
+            'daily_demand': round(daily_demand, 2),
+            'eoq': eoq,
+            'reorder_point': reorder_point,
+            'min_level': min_level,
+            'max_level': max_level
+        })
+
+        if update_levels and cursor:
+            cursor.execute("""
+                INSERT INTO inventory_levels (store_id, product_id, current_quantity, min_quantity, max_quantity, reorder_point)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    min_quantity = VALUES(min_quantity),
+                    max_quantity = VALUES(max_quantity),
+                    reorder_point = VALUES(reorder_point)
+            """, (
+                int(row['store_id']),
+                int(row['product_id']),
+                int(row['current_stock']),
+                min_level,
+                max_level,
+                reorder_point
+            ))
+
+    if update_levels and connection:
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+    response = {'items': results, 'parameters': {
+        'days_back': days_back,
+        'lead_time_days': lead_time_days,
+        'holding_cost_rate': holding_cost_rate,
+        'ordering_cost': ordering_cost,
+        'updated': update_levels
+    }}
+
+    if not inventory_table_ready:
+        response['note'] = 'טבלת inventory_levels לא קיימת או חסרה עמודה. החישוב בוצע ללא מלאי נוכחי.'
+
+    return jsonify(response)
+
+@app.route('/api/inventory-reorder-suggestions', methods=['GET'])
+@login_required
+def inventory_reorder_suggestions():
+    """Suggest reorders based on current stock vs reorder point."""
+    user_role = get_current_user_role()
+    user_store_id = get_current_user_store_id()
+    auto_order = request.args.get('auto_order', 'false').lower() == 'true'
+
+    if not table_exists('inventory_levels') or not column_exists('inventory_levels', 'current_quantity'):
+        return jsonify({'suggestions': [], 'note': 'טבלת inventory_levels לא קיימת או חסרה עמודה.'})
+
+    store_filter = ""
+    if user_role != 'admin' and user_store_id:
+        store_filter = f"WHERE i.store_id = {user_store_id}"
+
+    query = f"""
+    SELECT 
+        i.store_id,
+        s.store_name,
+        i.product_id,
+        p.product_name,
+        i.current_quantity,
+        i.reorder_point,
+        i.max_quantity
+    FROM inventory_levels i
+    JOIN dim_store s ON i.store_id = s.store_id
+    JOIN dim_product p ON i.product_id = p.product_id
+    {store_filter}
+    """
+
+    df = execute_query(query)
+    if df.empty:
+        return jsonify({'suggestions': []})
+
+    suggestions = []
+    connection = get_db_connection() if auto_order else None
+    cursor = connection.cursor() if connection else None
+
+    for _, row in df.iterrows():
+        if row['current_quantity'] <= row['reorder_point']:
+            reorder_qty = max(0, int(row['max_quantity']) - int(row['current_quantity']))
+            suggestions.append({
+                'store_id': int(row['store_id']),
+                'store_name': row['store_name'],
+                'product_id': int(row['product_id']),
+                'product_name': row['product_name'],
+                'current_stock': int(row['current_quantity']),
+                'reorder_point': int(row['reorder_point']),
+                'suggested_order_qty': reorder_qty
+            })
+
+            if auto_order and cursor:
+                cursor.execute("""
+                    INSERT INTO notifications (type, title, message, severity, store_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    'low_stock',
+                    f'הזמנה אוטומטית - {row["product_name"]}',
+                    f'נוצרה הצעת הזמנה אוטומטית של {reorder_qty} יחידות עבור {row["product_name"]} בסניף {row["store_name"]}.',
+                    'warning',
+                    int(row['store_id'])
+                ))
+
+    if auto_order and connection:
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+    return jsonify({'suggestions': suggestions, 'auto_order': auto_order})
+
+@app.route('/api/inventory-availability', methods=['GET'])
+@login_required
+def inventory_availability():
+    """Show store and central warehouse availability."""
+    user_role = get_current_user_role()
+    user_store_id = get_current_user_store_id()
+
+    if not table_exists('inventory_levels') or not column_exists('inventory_levels', 'current_quantity'):
+        return jsonify({'availability': [], 'note': 'טבלת inventory_levels לא קיימת או חסרה עמודה.'})
+
+    store_filter = ""
+    if user_role != 'admin' and user_store_id:
+        store_filter = f"WHERE i.store_id = {user_store_id}"
+
+    central_ready = table_exists('central_inventory') and column_exists('central_inventory', 'current_stock')
+
+    if central_ready:
+        query = f"""
+        SELECT 
+            i.store_id,
+            s.store_name,
+            i.product_id,
+            p.product_name,
+            i.current_quantity AS store_stock,
+            COALESCE(c.current_stock, 0) AS central_stock
+        FROM inventory_levels i
+        JOIN dim_store s ON i.store_id = s.store_id
+        JOIN dim_product p ON i.product_id = p.product_id
+        LEFT JOIN central_inventory c ON c.product_id = i.product_id
+        {store_filter}
+        """
+    else:
+        query = f"""
+        SELECT 
+            i.store_id,
+            s.store_name,
+            i.product_id,
+            p.product_name,
+            i.current_quantity AS store_stock,
+            0 AS central_stock
+        FROM inventory_levels i
+        JOIN dim_store s ON i.store_id = s.store_id
+        JOIN dim_product p ON i.product_id = p.product_id
+        {store_filter}
+        """
+
+    df = execute_query(query)
+    response = {'availability': df.to_dict(orient='records')}
+    if not central_ready:
+        response['note'] = 'טבלת central_inventory לא קיימת. מוצג מלאי סניפים בלבד.'
+    return jsonify(response)
+
+@app.route('/api/inventory-levels', methods=['GET'])
+@login_required
+def get_inventory_levels():
+    """Return inventory details with quantities and thresholds."""
+    user_role = get_current_user_role()
+    user_store_id = get_current_user_store_id()
+
+    if not table_exists('inventory_levels') or not column_exists('inventory_levels', 'current_quantity'):
+        return jsonify({'inventory': [], 'note': 'טבלת inventory_levels לא קיימת או חסרה עמודה.'})
+
+    store_filter = ""
+    if user_role != 'admin' and user_store_id:
+        store_filter = f"WHERE i.store_id = {user_store_id}"
+
+    query = f"""
+    SELECT 
+        i.store_id,
+        s.store_name,
+        i.product_id,
+        p.product_name,
+        i.current_quantity,
+        i.min_quantity,
+        i.max_quantity,
+        i.reorder_point,
+        i.last_updated
+    FROM inventory_levels i
+    JOIN dim_store s ON i.store_id = s.store_id
+    JOIN dim_product p ON i.product_id = p.product_id
+    {store_filter}
+    ORDER BY i.last_updated DESC
+    LIMIT 500
+    """
+
+    df = execute_query(query)
+    return jsonify({'inventory': df.to_dict(orient='records')})
 
 @app.route('/api/seasonal-analysis', methods=['GET'])
 @login_required
@@ -824,10 +1445,10 @@ def get_seasonal_analysis():
     # Monthly comparison (average by month across years)
     monthly_query = f"""
     SELECT 
-        d.month,
-        d.month_name,
-        AVG(monthly_revenue) AS avg_revenue,
-        AVG(monthly_profit) AS avg_profit,
+        monthly_data.month,
+        monthly_data.month_name,
+        AVG(monthly_data.monthly_revenue) AS avg_revenue,
+        AVG(monthly_data.monthly_profit) AS avg_profit,
         COUNT(*) AS year_count
     FROM (
         SELECT 
@@ -843,8 +1464,8 @@ def get_seasonal_analysis():
         WHERE 1=1 {where_clause}
         GROUP BY d.year, d.month, d.month_name
     ) AS monthly_data
-    GROUP BY d.month, d.month_name
-    ORDER BY d.month
+    GROUP BY monthly_data.month, monthly_data.month_name
+    ORDER BY monthly_data.month
     """
     
     df_quarterly = execute_query(quarterly_query)

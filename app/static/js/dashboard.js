@@ -127,9 +127,38 @@ async function loadDashboard() {
         
         // Load forecast
         loadForecast();
+
+        // Load inventory insights
+        loadInventoryInsights();
         
     } catch (error) {
         console.error('Error loading dashboard:', error);
+    }
+}
+
+// Load inventory insights
+async function loadInventoryInsights() {
+    const days = document.getElementById('inventory-days')?.value || '60';
+    const leadTime = document.getElementById('inventory-lead-time')?.value || '7';
+
+    try {
+        const optimizationResponse = await fetch(`/api/inventory-optimization?days=${days}&lead_time_days=${leadTime}`);
+        const optimizationData = await optimizationResponse.json();
+        updateInventoryOptimization(optimizationData);
+
+        const reorderResponse = await fetch(`/api/inventory-reorder-suggestions`);
+        const reorderData = await reorderResponse.json();
+        updateInventoryReorderSuggestions(reorderData);
+
+        const availabilityResponse = await fetch(`/api/inventory-availability`);
+        const availabilityData = await availabilityResponse.json();
+        updateInventoryAvailability(availabilityData);
+
+        const inventoryLevelsResponse = await fetch(`/api/inventory-levels`);
+        const inventoryLevelsData = await inventoryLevelsResponse.json();
+        updateInventoryLevelsTable(inventoryLevelsData);
+    } catch (error) {
+        console.error('Error loading inventory insights:', error);
     }
 }
 
@@ -548,5 +577,134 @@ function updateForecast(data) {
         `;
         document.getElementById('forecast-accuracy').innerHTML = accuracyHTML;
     }
+}
+
+// Update inventory optimization results
+function updateInventoryOptimization(data) {
+    if (!data || !data.items) return;
+
+    const items = data.items;
+
+    // Update KPI cards
+    const avgEoq = items.length
+        ? Math.round(items.reduce((sum, item) => sum + item.eoq, 0) / items.length)
+        : 0;
+
+    document.getElementById('avg-eoq').textContent = avgEoq.toLocaleString('he-IL');
+
+    // Build table
+    // Keep optimization data for cards/graphs; detailed table comes from inventory-levels
+}
+
+// Update inventory details table
+function updateInventoryLevelsTable(data) {
+    const tableEl = document.getElementById('inventory-table');
+    if (!tableEl) return;
+
+    if (!data || !data.inventory || data.inventory.length === 0) {
+        tableEl.innerHTML = '<div class="loading">אין נתוני מלאי להצגה</div>';
+        return;
+    }
+
+    let tableHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>סניף</th>
+                    <th>מוצר</th>
+                    <th>מלאי נוכחי</th>
+                    <th>מינימום</th>
+                    <th>מקסימום</th>
+                    <th>Reorder Point</th>
+                    <th>עודכן לאחרונה</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    data.inventory.slice(0, 50).forEach(item => {
+        tableHTML += `
+            <tr>
+                <td>${item.store_name}</td>
+                <td>${item.product_name}</td>
+                <td>${item.current_quantity}</td>
+                <td>${item.min_quantity}</td>
+                <td>${item.max_quantity}</td>
+                <td>${item.reorder_point}</td>
+                <td>${item.last_updated || ''}</td>
+            </tr>
+        `;
+    });
+
+    tableHTML += '</tbody></table>';
+    tableEl.innerHTML = tableHTML;
+}
+
+// Update reorder suggestions
+function updateInventoryReorderSuggestions(data) {
+    if (!data || !data.suggestions) return;
+
+    const suggestions = data.suggestions;
+    document.getElementById('low-stock-count').textContent = suggestions.length.toLocaleString('he-IL');
+    document.getElementById('suggested-orders-count').textContent = suggestions.length.toLocaleString('he-IL');
+
+    // Chart: reorder quantities
+    if (suggestions.length > 0) {
+        const labels = suggestions.slice(0, 10).map(s => s.product_name);
+        const values = suggestions.slice(0, 10).map(s => s.suggested_order_qty);
+
+        Plotly.newPlot('inventory-reorder-chart', [{
+            x: values,
+            y: labels,
+            type: 'bar',
+            orientation: 'h',
+            marker: { color: '#ff8c42' }
+        }], {
+            title: 'פריטים מתחת לנקודת הזמנה',
+            xaxis: { title: 'כמות הזמנה מוצעת' },
+            yaxis: { title: 'מוצר' },
+            height: 400
+        }, {responsive: true});
+    } else {
+        document.getElementById('inventory-reorder-chart').innerHTML = '<div class="loading">אין פריטים להזמנה כרגע</div>';
+    }
+}
+
+// Update inventory availability
+function updateInventoryAvailability(data) {
+    if (!data || !data.availability) return;
+
+    const availability = data.availability;
+    if (availability.length === 0) {
+        document.getElementById('inventory-availability-chart').innerHTML = '<div class="loading">אין נתוני מלאי</div>';
+        return;
+    }
+
+    const labels = availability.slice(0, 10).map(a => a.product_name);
+    const storeStock = availability.slice(0, 10).map(a => a.store_stock);
+    const centralStock = availability.slice(0, 10).map(a => a.central_stock);
+
+    Plotly.newPlot('inventory-availability-chart', [
+        {
+            x: labels,
+            y: storeStock,
+            type: 'bar',
+            name: 'מלאי בסניף',
+            marker: { color: '#4b5bdc' }
+        },
+        {
+            x: labels,
+            y: centralStock,
+            type: 'bar',
+            name: 'מלאי מרכזי',
+            marker: { color: '#48bb78' }
+        }
+    ], {
+        title: 'זמינות מלאי (סניף מול מרכזי)',
+        barmode: 'group',
+        xaxis: { title: 'מוצר' },
+        yaxis: { title: 'כמות' },
+        height: 400
+    }, {responsive: true});
 }
 

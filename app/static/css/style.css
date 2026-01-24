@@ -59,88 +59,111 @@ body {
     opacity: 0.9;
 }
 
-/* Dashboard specific layout */
-.dashboard-container {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    grid-template-areas: 
-        "sidebar main";
-    gap: 20px;
+/* Filters panel */
+.filters-panel {
+    background: #ffffff;
+    border-radius: 12px;
     padding: 20px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    margin-bottom: 20px;
+    border: 1px solid #eef0f6;
 }
 
-@media (max-width: 992px) {
-    .dashboard-container {
-        grid-template-columns: 1fr;
-        grid-template-areas: 
-            "sidebar"
-            "main";
+.filters-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.filters-title {
+    font-size: 1.15em;
+    font-weight: 600;
+    color: #4b5bdc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filters-actions .btn {
+    padding: 8px 14px;
+    font-size: 0.95em;
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.filter-card {
+    background: #fafbff;
+    border: 1px solid #e7eaf4;
+    border-radius: 10px;
+    padding: 14px;
+    min-height: 150px;
+}
+
+.filter-label {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #3f4a8a;
+    margin-bottom: 10px;
+}
+
+.filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.filter-field label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.85em;
+    color: #60668a;
+}
+
+.filter-card input[type="date"],
+.filter-card select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #d9deef;
+    border-radius: 6px;
+    font-size: 0.9em;
+    background: #fff;
+}
+
+.filter-card select[multiple] {
+    height: 140px;
+}
+
+.filter-hint {
+    margin-top: 8px;
+    font-size: 0.75em;
+    color: #7b82a3;
+}
+
+@media (max-width: 1200px) {
+    .filters-grid {
+        grid-template-columns: repeat(2, minmax(200px, 1fr));
     }
 }
 
-.sidebar {
-    grid-area: sidebar;
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    height: fit-content;
-    position: sticky;
-    top: 20px;
-}
+@media (max-width: 768px) {
+    .filters-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
 
-.sidebar h2 {
-    color: #667eea;
-    margin-bottom: 20px;
-    font-size: 1.3em;
-}
+    .filters-grid {
+        grid-template-columns: 1fr;
+    }
 
-.filter-group {
-    margin-bottom: 20px;
-}
-
-.filter-group h3 {
-    font-size: 1em;
-    color: #555;
-    margin-bottom: 10px;
-}
-
-.filter-group label {
-    display: block;
-    margin-bottom: 5px;
-    font-size: 0.9em;
-    color: #666;
-}
-
-.filter-group input[type="date"],
-.filter-group select {
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    font-size: 0.9em;
-    margin-bottom: 10px;
-}
-
-.filter-group select[multiple] {
-    height: 100px;
-}
-
-.btn-primary {
-    width: 100%;
-    padding: 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 5px;
-    font-size: 1em;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    .filter-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 .main-content {
@@ -304,6 +327,64 @@ table tr:hover {
     color: #666;
     font-style: italic;
     margin-top: 15px;
+}
+
+/* Inventory management */
+.inventory-controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.inventory-control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.inventory-control-group label {
+    font-weight: 600;
+    color: #4a4f6a;
+}
+
+.inventory-control-group select {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.inventory-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.inventory-card {
+    background: #ffffff;
+    border: 1px solid #e6e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.inventory-card-title {
+    color: #6b7280;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+
+.inventory-card-value {
+    font-size: 1.6em;
+    font-weight: 700;
+    color: #4b5bdc;
 }
 
 @media (max-width: 768px) {

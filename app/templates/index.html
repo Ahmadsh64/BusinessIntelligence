@@ -26,36 +26,52 @@
             </div>
         </div>
 
-        <div class="dashboard-container">
-        <!-- Filters Sidebar -->
-        <aside class="sidebar">
-            <h2>🔍 מסננים</h2>
-            
-            <div class="filter-group">
-                <h3>טווח תאריכים</h3>
-                <label>תאריך התחלה:</label>
-                <input type="date" id="date_start" />
-                <label>תאריך סיום:</label>
-                <input type="date" id="date_end" />
+        <!-- Filters Panel (below header) -->
+        <section class="filters-panel">
+            <div class="filters-header">
+                <div class="filters-title">
+                    <i class="bi bi-funnel"></i> מסננים
+                </div>
+                <div class="filters-actions">
+                    <button class="btn btn-primary" onclick="loadDashboard()">
+                        <i class="bi bi-arrow-clockwise"></i> עדכן דשבורד
+                    </button>
+                </div>
             </div>
+            <div class="filters-grid">
+                <div class="filter-card">
+                    <div class="filter-label">טווח תאריכים</div>
+                    <div class="filter-row">
+                        <div class="filter-field">
+                            <label for="date_start">תאריך התחלה</label>
+                            <input type="date" id="date_start" />
+                        </div>
+                        <div class="filter-field">
+                            <label for="date_end">תאריך סיום</label>
+                            <input type="date" id="date_end" />
+                        </div>
+                    </div>
+                </div>
 
-            <div class="filter-group">
-                <h3>סניפים</h3>
-                <select id="stores" multiple size="5"></select>
+                <div class="filter-card">
+                    <div class="filter-label">סניפים</div>
+                    <select id="stores" multiple size="5"></select>
+                    <div class="filter-hint">ניתן לבחור כמה סניפים</div>
+                </div>
+
+                <div class="filter-card">
+                    <div class="filter-label">קטגוריות</div>
+                    <select id="categories" multiple size="5"></select>
+                    <div class="filter-hint">ניתן לבחור כמה קטגוריות</div>
+                </div>
+
+                <div class="filter-card">
+                    <div class="filter-label">אזורים</div>
+                    <select id="regions" multiple size="5"></select>
+                    <div class="filter-hint">ניתן לבחור כמה אזורים</div>
+                </div>
             </div>
-
-            <div class="filter-group">
-                <h3>קטגוריות</h3>
-                <select id="categories" multiple size="5"></select>
-            </div>
-
-            <div class="filter-group">
-                <h3>אזורים</h3>
-                <select id="regions" multiple size="5"></select>
-            </div>
-
-            <button class="btn-primary" onclick="loadDashboard()">עדכן דשבורד</button>
-        </aside>
+        </section>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -123,6 +139,54 @@
                 </div>
             </section>
 
+            <!-- Inventory Management -->
+            <section class="section">
+                <h2>📦 ניהול מלאי חכם</h2>
+                <div class="inventory-controls">
+                    <div class="inventory-control-group">
+                        <label>תקופת ניתוח (ימים):</label>
+                        <select id="inventory-days" onchange="loadInventoryInsights()">
+                            <option value="30">30</option>
+                            <option value="60" selected>60</option>
+                            <option value="90">90</option>
+                        </select>
+                    </div>
+                    <div class="inventory-control-group">
+                        <label>זמן אספקה (ימים):</label>
+                        <select id="inventory-lead-time" onchange="loadInventoryInsights()">
+                            <option value="5">5</option>
+                            <option value="7" selected>7</option>
+                            <option value="14">14</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline-primary" onclick="loadInventoryInsights()">
+                        <i class="bi bi-arrow-clockwise"></i> עדכן מלאי
+                    </button>
+                </div>
+
+                <div class="inventory-cards">
+                    <div class="inventory-card">
+                        <div class="inventory-card-title">פריטים מתחת לנקודת הזמנה</div>
+                        <div class="inventory-card-value" id="low-stock-count">0</div>
+                    </div>
+                    <div class="inventory-card">
+                        <div class="inventory-card-title">הזמנות מוצעות</div>
+                        <div class="inventory-card-value" id="suggested-orders-count">0</div>
+                    </div>
+                    <div class="inventory-card">
+                        <div class="inventory-card-title">EOQ ממוצע</div>
+                        <div class="inventory-card-value" id="avg-eoq">0</div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <div id="inventory-reorder-chart" class="chart"></div>
+                    <div id="inventory-availability-chart" class="chart"></div>
+                </div>
+
+                <div class="table-container" id="inventory-table"></div>
+            </section>
+
             <!-- Seasonal Analysis -->
             <section class="section">
                 <h2>📅 ניתוח עונתי</h2>
@@ -148,7 +212,6 @@
                 <div id="forecast-accuracy" class="accuracy-box"></div>
             </section>
         </main>
-        </div>
 {% endblock %}
 
 {% block extra_scripts %}

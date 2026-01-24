@@ -110,6 +110,79 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- =====================================================
+-- NOTIFICATIONS TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS notifications (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    store_id INT,
+    type VARCHAR(50) NOT NULL,  -- 'low_stock', 'high_sales', 'anomaly', 'forecast', 'system'
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    severity VARCHAR(20) DEFAULT 'info',  -- 'info', 'warning', 'critical'
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (store_id) REFERENCES dim_store(store_id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id),
+    INDEX idx_store_id (store_id),
+    INDEX idx_is_read (is_read),
+    INDEX idx_created_at (created_at)
+);
+
+-- =====================================================
+-- INVENTORY LEVELS TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS inventory_levels (
+    inventory_id INT AUTO_INCREMENT PRIMARY KEY,
+    store_id INT NOT NULL,
+    product_id INT NOT NULL,
+    current_stock INT DEFAULT 0,
+    min_stock_level INT DEFAULT 10,
+    max_stock_level INT DEFAULT 100,
+    reorder_point INT DEFAULT 20,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES dim_store(store_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES dim_product(product_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_store_product (store_id, product_id),
+    INDEX idx_store_id (store_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_current_stock (current_stock)
+);
+
+-- Central Warehouse Inventory
+CREATE TABLE IF NOT EXISTS central_inventory (
+    central_inventory_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    current_stock INT DEFAULT 0,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES dim_product(product_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_product (product_id),
+    INDEX idx_product_id (product_id)
+);
+
+-- =====================================================
+-- ACTIVITY LOG TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS activity_log (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    action_type VARCHAR(50) NOT NULL,  -- 'login', 'logout', 'create_user', 'update_user', 'delete_user', 'export_data'
+    entity_type VARCHAR(50),  -- 'user', 'product', 'store', 'sale'
+    entity_id INT,
+    description TEXT,
+    ip_address VARCHAR(45),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    INDEX idx_user_id (user_id),
+    INDEX idx_action_type (action_type),
+    INDEX idx_created_at (created_at)
+);
+
+-- =====================================================
 -- VIEWS FOR COMMON QUERIES
 -- =====================================================
 
