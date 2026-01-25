@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load dashboard data
     loadDashboard();
+
+    // Initialize forecast model UI
+    updateForecastModelUI();
 });
 
 // Load filter options
@@ -157,15 +160,39 @@ async function loadInventoryInsights() {
         const inventoryLevelsResponse = await fetch(`/api/inventory-levels`);
         const inventoryLevelsData = await inventoryLevelsResponse.json();
         updateInventoryLevelsTable(inventoryLevelsData);
+
+        await loadInventoryAutoOrders(false);
     } catch (error) {
         console.error('Error loading inventory insights:', error);
     }
+}
+
+async function loadInventoryAutoOrders(autoOrder = false) {
+    const days = document.getElementById('inventory-days')?.value || '60';
+    const leadTime = document.getElementById('inventory-lead-time')?.value || '7';
+    const autoOrderParam = autoOrder ? '&auto_order=true' : '';
+
+    try {
+        const response = await fetch(`/api/inventory-auto-orders?days=${days}&lead_time_days=${leadTime}${autoOrderParam}`);
+        const data = await response.json();
+        updateInventoryAutoOrdersTable(data);
+    } catch (error) {
+        console.error('Error loading inventory auto orders:', error);
+    }
+}
+
+async function createInventoryAutoOrders() {
+    const confirmed = confirm('להמשיך וליצור הזמנות אוטומטיות? תיווצר התראה לכל פריט.');
+    if (!confirmed) return;
+    await loadInventoryAutoOrders(true);
 }
 
 // Load sales forecast
 async function loadForecast() {
     const filters = getFilters();
     const forecastMonths = document.getElementById('forecast-months')?.value || '6';
+    const forecastModel = document.getElementById('forecast-model')?.value || 'linear';
+    const arimaOrder = document.getElementById('arima-order')?.value || '1,1,1';
     
     // Use a date range that includes historical data (last 2 years)
     const endDate = new Date();
@@ -177,7 +204,9 @@ async function loadForecast() {
         ...filters,
         dateStart: startDate.toISOString().split('T')[0],
         dateEnd: endDate.toISOString().split('T')[0],
-        months: forecastMonths
+        months: forecastMonths,
+        model: forecastModel,
+        arima_order: arimaOrder
     };
     
     const queryString = buildQueryString(forecastFilters);
@@ -569,13 +598,28 @@ function updateForecast(data) {
     
     // Display accuracy
     if (data.model_accuracy && document.getElementById('forecast-accuracy')) {
+        const revenueR2 = data.model_accuracy.revenue_r2;
+        const profitR2 = data.model_accuracy.profit_r2;
+        if (typeof revenueR2 !== 'number' || typeof profitR2 !== 'number') {
+            document.getElementById('forecast-accuracy').innerHTML =
+                `<p class="note">מודל חיזוי נוכחי: ${data.model_type || 'linear'}</p>`;
+            return;
+        }
         const accuracyHTML = `
             <h3>📊 דיוק המודל:</h3>
-            <p><strong>דיוק חיזוי הכנסות (R²):</strong> ${(data.model_accuracy.revenue_r2 * 100).toFixed(1)}%</p>
-            <p><strong>דיוק חיזוי רווח (R²):</strong> ${(data.model_accuracy.profit_r2 * 100).toFixed(1)}%</p>
+            <p><strong>דיוק חיזוי הכנסות (R²):</strong> ${(revenueR2 * 100).toFixed(1)}%</p>
+            <p><strong>דיוק חיזוי רווח (R²):</strong> ${(profitR2 * 100).toFixed(1)}%</p>
             <p class="note">* R² של 1.0 = חיזוי מושלם, 0.0 = חיזוי אקראי</p>
         `;
         document.getElementById('forecast-accuracy').innerHTML = accuracyHTML;
+    }
+}
+
+function updateForecastModelUI() {
+    const model = document.getElementById('forecast-model')?.value || 'linear';
+    const arimaWrap = document.getElementById('arima-order-wrap');
+    if (arimaWrap) {
+        arimaWrap.style.display = model === 'arima' ? 'inline-flex' : 'none';
     }
 }
 
@@ -632,6 +676,54 @@ function updateInventoryLevelsTable(data) {
                 <td>${item.max_quantity}</td>
                 <td>${item.reorder_point}</td>
                 <td>${item.last_updated || ''}</td>
+            </tr>
+        `;
+    });
+
+    tableHTML += '</tbody></table>';
+    tableEl.innerHTML = tableHTML;
+}
+
+function updateInventoryAutoOrdersTable(data) {
+    const tableEl = document.getElementById('inventory-auto-orders-table');
+    if (!tableEl) return;
+
+    if (!data || !data.suggestions || data.suggestions.length === 0) {
+        tableEl.innerHTML = '<div class="loading">אין הזמנות אוטומטיות להצגה</div>';
+        const totalEl = document.getElementById('total-auto-order-qty');
+        if (totalEl) totalEl.textContent = '0';
+        return;
+    }
+
+    const totalQty = data.suggestions.reduce((sum, item) => sum + Number(item.suggested_order_qty || 0), 0);
+    const totalEl = document.getElementById('total-auto-order-qty');
+    if (totalEl) totalEl.textContent = totalQty.toLocaleString('he-IL');
+
+    let tableHTML = `
+        <h3>⚡ הזמנות מלאי אוטומטיות</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>סניף</th>
+                    <th>מוצר</th>
+                    <th>מלאי נוכחי</th>
+                    <th>Reorder Point</th>
+                    <th>EOQ</th>
+                    <th>כמות הזמנה מומלצת</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    data.suggestions.slice(0, 50).forEach(item => {
+        tableHTML += `
+            <tr>
+                <td>${item.store_name}</td>
+                <td>${item.product_name}</td>
+                <td>${item.current_stock}</td>
+                <td>${item.reorder_point}</td>
+                <td>${item.eoq}</td>
+                <td>${item.suggested_order_qty}</td>
             </tr>
         `;
     });

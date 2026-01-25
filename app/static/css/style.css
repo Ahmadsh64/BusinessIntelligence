@@ -4,10 +4,34 @@
     box-sizing: border-box;
 }
 
+:root {
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --text: #2f2f2f;
+    --muted: #6b7280;
+    --primary: #667eea;
+    --primary-strong: #4b5bdc;
+    --border: #e6e8f0;
+    --shadow: 0 6px 18px rgba(16, 24, 40, 0.08);
+    --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+body.theme-dark {
+    --bg: #0f172a;
+    --surface: #111827;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --primary: #8b9cff;
+    --primary-strong: #7c89ff;
+    --border: #1f2937;
+    --shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    --shadow-soft: 0 6px 14px rgba(0, 0, 0, 0.3);
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f5f5f5;
-    color: #333;
+    background-color: var(--bg);
+    color: var(--text);
     direction: rtl;
     min-height: 100vh;
     display: flex;
@@ -49,6 +73,7 @@ body {
     padding: 30px;
     border-radius: 10px;
     margin-bottom: 30px;
+    box-shadow: var(--shadow);
 }
 
 .page-header h1 {
@@ -61,12 +86,12 @@ body {
 
 /* Filters panel */
 .filters-panel {
-    background: #ffffff;
+    background: var(--surface);
     border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-soft);
     margin-bottom: 20px;
-    border: 1px solid #eef0f6;
+    border: 1px solid var(--border);
 }
 
 .filters-header {
@@ -79,7 +104,7 @@ body {
 .filters-title {
     font-size: 1.15em;
     font-weight: 600;
-    color: #4b5bdc;
+    color: var(--primary-strong);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -98,16 +123,22 @@ body {
 
 .filter-card {
     background: #fafbff;
-    border: 1px solid #e7eaf4;
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 14px;
     min-height: 150px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.filter-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-soft);
 }
 
 .filter-label {
     font-size: 0.95em;
     font-weight: 600;
-    color: #3f4a8a;
+    color: var(--primary-strong);
     margin-bottom: 10px;
 }
 
@@ -128,10 +159,11 @@ body {
 .filter-card select {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid #d9deef;
+    border: 1px solid var(--border);
     border-radius: 6px;
     font-size: 0.9em;
-    background: #fff;
+    background: var(--surface);
+    color: var(--text);
 }
 
 .filter-card select[multiple] {
@@ -171,15 +203,21 @@ body {
 }
 
 .section {
-    background: white;
+    background: var(--surface);
     padding: 25px;
     margin-bottom: 20px;
     border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-soft);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.section:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
 }
 
 .section h2 {
-    color: #667eea;
+    color: var(--primary);
     margin-bottom: 20px;
     font-size: 1.5em;
 }
@@ -197,7 +235,13 @@ body {
     padding: 20px;
     border-radius: 10px;
     text-align: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 22px rgba(102, 126, 234, 0.25);
 }
 
 .kpi-card h3 {
@@ -219,10 +263,11 @@ body {
 }
 
 .chart {
-    background: white;
+    background: var(--surface);
     padding: 15px;
     border-radius: 8px;
     min-height: 400px;
+    box-shadow: var(--shadow-soft);
 }
 
 .table-container {
@@ -240,11 +285,11 @@ table th,
 table td {
     padding: 12px;
     text-align: right;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--border);
 }
 
 table th {
-    background-color: #667eea;
+    background-color: var(--primary);
     color: white;
     font-weight: bold;
 }
@@ -260,15 +305,16 @@ table tr:hover {
 }
 
 .insights-box {
-    background: #f8f9fa;
+    background: var(--surface);
     padding: 20px;
     border-radius: 8px;
     margin-top: 20px;
-    border-right: 4px solid #667eea;
+    border-right: 4px solid var(--primary);
+    box-shadow: var(--shadow-soft);
 }
 
 .insights-box h3 {
-    color: #667eea;
+    color: var(--primary);
     margin-bottom: 15px;
 }
 
@@ -280,7 +326,7 @@ table tr:hover {
 .insights-box li {
     padding: 10px;
     margin-bottom: 10px;
-    background: white;
+    background: var(--surface);
     border-radius: 5px;
     border-right: 3px solid #48bb78;
 }
@@ -288,8 +334,9 @@ table tr:hover {
 .forecast-controls {
     margin-bottom: 20px;
     padding: 15px;
-    background: #f8f9fa;
+    background: var(--surface);
     border-radius: 8px;
+    box-shadow: var(--shadow-soft);
 }
 
 .forecast-controls label {
@@ -299,18 +346,21 @@ table tr:hover {
 
 .forecast-controls select {
     padding: 8px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border);
     border-radius: 5px;
     font-size: 1em;
     margin-right: 10px;
+    background: var(--surface);
+    color: var(--text);
 }
 
 .accuracy-box {
-    background: #e8f5e9;
+    background: var(--surface);
     padding: 20px;
     border-radius: 8px;
     margin-top: 20px;
     border-right: 4px solid #48bb78;
+    box-shadow: var(--shadow-soft);
 }
 
 .accuracy-box h3 {
@@ -337,8 +387,9 @@ table tr:hover {
     flex-wrap: wrap;
     margin-bottom: 16px;
     padding: 12px;
-    background: #f8f9fa;
+    background: var(--surface);
     border-radius: 8px;
+    box-shadow: var(--shadow-soft);
 }
 
 .inventory-control-group {
@@ -354,9 +405,10 @@ table tr:hover {
 
 .inventory-control-group select {
     padding: 6px 10px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border);
     border-radius: 6px;
-    background: #fff;
+    background: var(--surface);
+    color: var(--text);
 }
 
 .inventory-cards {
@@ -367,16 +419,22 @@ table tr:hover {
 }
 
 .inventory-card {
-    background: #ffffff;
-    border: 1px solid #e6e8f0;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 16px;
     text-align: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-soft);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.inventory-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
 }
 
 .inventory-card-title {
-    color: #6b7280;
+    color: var(--muted);
     font-size: 0.9em;
     margin-bottom: 8px;
 }
@@ -384,7 +442,39 @@ table tr:hover {
 .inventory-card-value {
     font-size: 1.6em;
     font-weight: 700;
-    color: #4b5bdc;
+    color: var(--primary-strong);
+}
+
+/* Buttons + inputs */
+.btn {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-soft);
+}
+
+input, select, .form-control {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+/* Theme toggle */
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 0.9em;
+}
+
+body.theme-dark .theme-toggle {
+    background: rgba(255, 255, 255, 0.1);
 }
 
 @media (max-width: 768px) {
@@ -402,6 +492,15 @@ table tr:hover {
     
     .kpi-grid {
         grid-template-columns: 1fr;
+    }
+
+    .chart {
+        min-height: 300px;
+    }
+
+    .inventory-controls {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }
 

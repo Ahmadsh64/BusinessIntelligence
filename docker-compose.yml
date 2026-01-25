@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: retail_bi_db
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345
+      MYSQL_DATABASE: BusinessIntelligence
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./warehouse/star_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+
+  app:
+    build: .
+    container_name: retail_bi_app
+    environment:
+      DB_HOST: db
+      DB_NAME: BusinessIntelligence
+      DB_USER: root
+      DB_PASSWORD: 12345
+      DB_CHARSET: utf8mb4
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+

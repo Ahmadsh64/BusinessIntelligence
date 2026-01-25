@@ -14,6 +14,12 @@
                 <button class="btn btn-success" onclick="exportToCSV()">
                     <i class="bi bi-download"></i> ייצא ל-CSV
                 </button>
+                <button class="btn btn-outline-success" onclick="exportToExcel()">
+                    <i class="bi bi-file-earmark-excel"></i> ייצא ל-Excel
+                </button>
+                <button class="btn btn-outline-danger" onclick="exportToPDF()">
+                    <i class="bi bi-file-earmark-pdf"></i> ייצא ל-PDF
+                </button>
                 <button class="btn btn-primary" onclick="shareDashboard()">
                     <i class="bi bi-share"></i> שתף דשבורד
                 </button>
@@ -162,6 +168,12 @@
                     <button class="btn btn-outline-primary" onclick="loadInventoryInsights()">
                         <i class="bi bi-arrow-clockwise"></i> עדכן מלאי
                     </button>
+                    <button class="btn btn-outline-warning" onclick="loadInventoryAutoOrders()">
+                        <i class="bi bi-lightning-charge"></i> הצג הזמנות אוטומטיות
+                    </button>
+                    <button class="btn btn-warning" onclick="createInventoryAutoOrders()">
+                        <i class="bi bi-check2-circle"></i> בצע הזמנות אוטומטיות
+                    </button>
                 </div>
 
                 <div class="inventory-cards">
@@ -172,6 +184,10 @@
                     <div class="inventory-card">
                         <div class="inventory-card-title">הזמנות מוצעות</div>
                         <div class="inventory-card-value" id="suggested-orders-count">0</div>
+                    </div>
+                    <div class="inventory-card">
+                        <div class="inventory-card-title">סה״כ יחידות להזמנה</div>
+                        <div class="inventory-card-value" id="total-auto-order-qty">0</div>
                     </div>
                     <div class="inventory-card">
                         <div class="inventory-card-title">EOQ ממוצע</div>
@@ -185,6 +201,7 @@
                 </div>
 
                 <div class="table-container" id="inventory-table"></div>
+                <div class="table-container" id="inventory-auto-orders-table"></div>
             </section>
 
             <!-- Seasonal Analysis -->
@@ -207,6 +224,16 @@
                         <option value="6" selected>6 חודשים</option>
                         <option value="12">12 חודשים</option>
                     </select>
+                    <label>מודל חיזוי:</label>
+                    <select id="forecast-model" onchange="loadForecast(); updateForecastModelUI();">
+                        <option value="linear" selected>Linear</option>
+                        <option value="arima">ARIMA</option>
+                        <option value="prophet">Prophet</option>
+                    </select>
+                    <div id="arima-order-wrap" style="display:none;">
+                        <label>ARIMA Order:</label>
+                        <input id="arima-order" type="text" value="1,1,1" style="width: 90px;">
+                    </div>
                 </div>
                 <div id="forecast-chart" class="chart" style="min-height: 500px;"></div>
                 <div id="forecast-accuracy" class="accuracy-box"></div>
@@ -230,6 +257,54 @@
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = `retail_bi_export_${new Date().toISOString().split('T')[0]}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+                    alert('שגיאה בייצוא הנתונים');
+                }
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('שגיאה בייצוא הנתונים');
+            }
+        }
+
+        async function exportToExcel() {
+            const filters = getFilters();
+            const queryString = buildQueryString(filters);
+            try {
+                const response = await fetch(`/api/export-excel?${queryString}`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `retail_bi_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+                    alert('שגיאה בייצוא הנתונים');
+                }
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('שגיאה בייצוא הנתונים');
+            }
+        }
+
+        async function exportToPDF() {
+            const filters = getFilters();
+            const queryString = buildQueryString(filters);
+            try {
+                const response = await fetch(`/api/export-pdf?${queryString}`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `retail_bi_report_${new Date().toISOString().split('T')[0]}.pdf`;
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);

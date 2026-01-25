@@ -110,6 +110,18 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- =====================================================
+-- USER SETTINGS TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id INT PRIMARY KEY,
+    theme VARCHAR(20) DEFAULT 'light',
+    chart_style VARCHAR(30) DEFAULT 'default',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- =====================================================
 -- NOTIFICATIONS TABLE
 -- =====================================================
 

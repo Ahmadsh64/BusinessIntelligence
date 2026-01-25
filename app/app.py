@@ -18,6 +18,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.cluster import KMeans
+from io import StringIO, BytesIO
+from fpdf import FPDF
+import os
+try:
+    from prophet import Prophet
+except Exception:
+    Prophet = None
+try:
+    from statsmodels.tsa.arima.model import ARIMA
+except Exception:
+    ARIMA = None
 
 app = Flask(__name__)
 CORS(app)
@@ -26,11 +37,11 @@ app.config['JWT_SECRET_KEY'] = 'jwt-secret-key-change-in-production'  # Change t
 
 # Database configuration
 DB_CONFIG = {
-    'host': 'localhost',
-    'database': 'BusinessIntelligence',
-    'user': 'root',
-    'password': '12345',
-    'charset': 'utf8mb4'
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'database': os.environ.get('DB_NAME', 'BusinessIntelligence'),
+    'user': os.environ.get('DB_USER', 'root'),
+    'password': os.environ.get('DB_PASSWORD', '12345'),
+    'charset': os.environ.get('DB_CHARSET', 'utf8mb4')
 }
 
 # SQLAlchemy engine (for pandas read_sql)
@@ -57,6 +68,33 @@ def execute_query(query):
     except Exception as e:
         print(f"Query error: {e}")
         return pd.DataFrame()
+
+def get_export_sales_df(date_start, date_end, stores, categories, regions):
+    """Fetch sales data for export based on filters."""
+    where_clause = build_where_clause(date_start, date_end, stores, categories, regions, restrict_to_store=True)
+    query = f"""
+    SELECT 
+        d.date,
+        s.store_name,
+        s.city,
+        s.region,
+        p.product_name,
+        p.category,
+        c.customer_name,
+        c.age_group,
+        f.quantity,
+        f.revenue,
+        f.profit
+    FROM fact_sales f
+    JOIN dim_date d ON f.date_id = d.date_id
+    JOIN dim_store s ON f.store_id = s.store_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    WHERE 1=1 {where_clause}
+    ORDER BY d.date DESC
+    LIMIT 10000
+    """
+    return execute_query(query)
 
 def table_exists(table_name):
     """Check if a table exists in the database."""
@@ -135,6 +173,10 @@ def get_current_user_role():
     """Get current user's role from session"""
     return session.get('role', None)
 
+def get_current_user_id():
+    """Get current user's user_id from session"""
+    return session.get('user_id', None)
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page"""
@@ -153,7 +195,7 @@ def login():
                 cursor.execute(
                     "SELECT user_id, store_id, username, password_hash, role FROM users WHERE username = %s AND is_active = TRUE",
                     (username,)
-                )
+                )   
                 user = cursor.fetchone()
                 
                 if user and check_password_hash(user['password_hash'], password):
@@ -346,39 +388,13 @@ def export_csv():
     stores = request.args.get('stores', '')
     categories = request.args.get('categories', '')
     regions = request.args.get('regions', '')
-    
-    where_clause = build_where_clause(date_start, date_end, stores, categories, regions, restrict_to_store=True)
-    
-    query = f"""
-    SELECT 
-        d.date,
-        s.store_name,
-        s.city,
-        s.region,
-        p.product_name,
-        p.category,
-        c.customer_name,
-        c.age_group,
-        f.quantity,
-        f.revenue,
-        f.profit
-    FROM fact_sales f
-    JOIN dim_date d ON f.date_id = d.date_id
-    JOIN dim_store s ON f.store_id = s.store_id
-    JOIN dim_product p ON f.product_id = p.product_id
-    JOIN dim_customer c ON f.customer_id = c.customer_id
-    WHERE 1=1 {where_clause}
-    ORDER BY d.date DESC
-    LIMIT 10000
-    """
-    
-    df = execute_query(query)
+
+    df = get_export_sales_df(date_start, date_end, stores, categories, regions)
     
     if df.empty:
         return jsonify({'error': 'No data to export'}), 400
     
     # Create CSV
-    from io import StringIO
     output = StringIO()
     df.to_csv(output, index=False, encoding='utf-8-sig')
     output.seek(0)
@@ -387,6 +403,67 @@ def export_csv():
         output.getvalue(),
         mimetype='text/csv',
         headers={'Content-Disposition': f'attachment; filename=retail_bi_export_{datetime.now().strftime("%Y%m%d")}.csv'}
+    )
+
+@app.route('/api/export-excel', methods=['GET'])
+@login_required
+def export_excel():
+    """Export data to Excel"""
+    date_start = request.args.get('date_start', '2023-01-01')
+    date_end = request.args.get('date_end', datetime.now().strftime('%Y-%m-%d'))
+    stores = request.args.get('stores', '')
+    categories = request.args.get('categories', '')
+    regions = request.args.get('regions', '')
+
+    df = get_export_sales_df(date_start, date_end, stores, categories, regions)
+    if df.empty:
+        return jsonify({'error': 'No data to export'}), 400
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sales Report')
+    output.seek(0)
+
+    return Response(
+        output.getvalue(),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename=retail_bi_report_{datetime.now().strftime("%Y%m%d")}.xlsx'}
+    )
+
+@app.route('/api/export-pdf', methods=['GET'])
+@login_required
+def export_pdf():
+    """Export data to PDF"""
+    date_start = request.args.get('date_start', '2023-01-01')
+    date_end = request.args.get('date_end', datetime.now().strftime('%Y-%m-%d'))
+    stores = request.args.get('stores', '')
+    categories = request.args.get('categories', '')
+    regions = request.args.get('regions', '')
+
+    df = get_export_sales_df(date_start, date_end, stores, categories, regions)
+    if df.empty:
+        return jsonify({'error': 'No data to export'}), 400
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Sales Report", ln=True, align="C")
+    pdf.ln(5)
+    pdf.set_font("Arial", size=9)
+
+    max_rows = 200
+    for _, row in df.head(max_rows).iterrows():
+        pdf.cell(0, 6, txt=f"{row['date']} | {row['store_name']} | {row['product_name']} | {row['quantity']} | ₪{row['revenue']}", ln=True)
+
+    output = BytesIO()
+    pdf.output(output)
+    output.seek(0)
+
+    return Response(
+        output.getvalue(),
+        mimetype='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename=retail_bi_report_{datetime.now().strftime("%Y%m%d")}.pdf'}
     )
 
 @app.route('/api/kpis', methods=['GET'])
@@ -822,6 +899,66 @@ def change_password():
             print(f"Database error: {e}")
             connection.close()
             return jsonify({'error': 'שגיאה בשינוי סיסמה'}), 500
+    return jsonify({'error': 'שגיאה בהתחברות'}), 500
+
+@app.route('/api/user-settings', methods=['GET', 'PUT'])
+@login_required
+def user_settings():
+    """Get or update user preferences (theme, etc.)"""
+    if not table_exists('user_settings'):
+        return jsonify({'theme': 'light', 'note': 'טבלת user_settings לא קיימת.'})
+
+    user_id = get_current_user_id()
+    if request.method == 'GET':
+        connection = get_db_connection()
+        if connection:
+            try:
+                cursor = connection.cursor(dictionary=True)
+                cursor.execute(
+                    "SELECT theme, chart_style FROM user_settings WHERE user_id = %s",
+                    (user_id,)
+                )
+                row = cursor.fetchone()
+                cursor.close()
+                connection.close()
+                if not row:
+                    return jsonify({'theme': 'light', 'chart_style': 'default'})
+                return jsonify(row)
+            except Error as e:
+                print(f"Database error: {e}")
+                connection.close()
+                return jsonify({'error': 'שגיאה בשליפת הגדרות'}), 500
+        return jsonify({'error': 'שגיאה בהתחברות'}), 500
+
+    data = request.get_json() or {}
+    theme = (data.get('theme') or 'light').lower()
+    chart_style = data.get('chart_style') or 'default'
+    if theme not in ['light', 'dark']:
+        return jsonify({'error': 'ערך theme לא תקין'}), 400
+
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                INSERT INTO user_settings (user_id, theme, chart_style)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    theme = VALUES(theme),
+                    chart_style = VALUES(chart_style),
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (user_id, theme, chart_style)
+            )
+            connection.commit()
+            cursor.close()
+            connection.close()
+            return jsonify({'success': True, 'theme': theme, 'chart_style': chart_style})
+        except Error as e:
+            print(f"Database error: {e}")
+            connection.close()
+            return jsonify({'error': 'שגיאה בעדכון הגדרות'}), 500
     return jsonify({'error': 'שגיאה בהתחברות'}), 500
 
 @app.route('/api/notifications', methods=['GET'])
@@ -1323,6 +1460,109 @@ def inventory_reorder_suggestions():
 
     return jsonify({'suggestions': suggestions, 'auto_order': auto_order})
 
+@app.route('/api/inventory-auto-orders', methods=['GET'])
+@login_required
+def inventory_auto_orders():
+    """Auto order suggestions using EOQ and reorder point."""
+    days_back = int(request.args.get('days', 60))
+    lead_time_days = int(request.args.get('lead_time_days', 7))
+    holding_cost_rate = float(request.args.get('holding_cost_rate', 0.2))
+    ordering_cost = float(request.args.get('ordering_cost', 50))
+    auto_order = request.args.get('auto_order', 'false').lower() == 'true'
+
+    if not table_exists('inventory_levels') or not column_exists('inventory_levels', 'current_quantity'):
+        return jsonify({'suggestions': [], 'note': 'טבלת inventory_levels לא קיימת או חסרה עמודה.'})
+
+    user_role = get_current_user_role()
+    user_store_id = get_current_user_store_id()
+    store_filter = ""
+    if user_role != 'admin' and user_store_id:
+        store_filter = f"AND s.store_id = {user_store_id}"
+
+    query = f"""
+    SELECT 
+        s.store_id,
+        s.store_name,
+        p.product_id,
+        p.product_name,
+        p.cost AS unit_cost,
+        COALESCE(i.current_quantity, 0) AS current_quantity,
+        COALESCE(i.reorder_point, 0) AS reorder_point,
+        COALESCE(i.max_quantity, 0) AS max_quantity,
+        SUM(f.quantity) AS total_qty,
+        COUNT(DISTINCT d.date) AS sales_days
+    FROM fact_sales f
+    JOIN dim_store s ON f.store_id = s.store_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    JOIN dim_date d ON f.date_id = d.date_id
+    LEFT JOIN inventory_levels i
+        ON i.store_id = s.store_id AND i.product_id = p.product_id
+    WHERE d.date >= DATE_SUB(CURDATE(), INTERVAL {days_back} DAY)
+    {store_filter}
+    GROUP BY s.store_id, s.store_name, p.product_id, p.product_name, p.cost, i.current_quantity, i.reorder_point, i.max_quantity
+    """
+
+    df = execute_query(query)
+    if df.empty:
+        return jsonify({'suggestions': []})
+
+    suggestions = []
+    connection = get_db_connection() if auto_order else None
+    cursor = connection.cursor() if connection else None
+
+    for _, row in df.iterrows():
+        if row['sales_days'] == 0:
+            continue
+
+        daily_demand = row['total_qty'] / max(row['sales_days'], 1)
+        annual_demand = daily_demand * 365
+        holding_cost = max(row['unit_cost'], 1) * holding_cost_rate
+        eoq = int(max(1, (2 * annual_demand * ordering_cost / max(holding_cost, 1)) ** 0.5))
+
+        reorder_point = int(row['reorder_point']) if int(row['reorder_point']) > 0 else int(daily_demand * lead_time_days * 1.1)
+        max_level = int(row['max_quantity']) if int(row['max_quantity']) > 0 else int(reorder_point + eoq)
+
+        if int(row['current_quantity']) <= reorder_point:
+            suggested_qty = max(eoq, max_level - int(row['current_quantity']))
+            suggestions.append({
+                'store_id': int(row['store_id']),
+                'store_name': row['store_name'],
+                'product_id': int(row['product_id']),
+                'product_name': row['product_name'],
+                'current_stock': int(row['current_quantity']),
+                'reorder_point': reorder_point,
+                'eoq': eoq,
+                'suggested_order_qty': int(suggested_qty)
+            })
+
+            if auto_order and cursor:
+                cursor.execute("""
+                    INSERT INTO notifications (type, title, message, severity, store_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    'auto_order',
+                    f'הזמנה אוטומטית - {row["product_name"]}',
+                    f'הומלצה הזמנה אוטומטית של {int(suggested_qty)} יחידות עבור {row["product_name"]} בסניף {row["store_name"]}.',
+                    'warning',
+                    int(row['store_id'])
+                ))
+
+    if auto_order and connection:
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+    return jsonify({
+        'suggestions': suggestions,
+        'parameters': {
+            'days_back': days_back,
+            'lead_time_days': lead_time_days,
+            'holding_cost_rate': holding_cost_rate,
+            'ordering_cost': ordering_cost,
+            'auto_order': auto_order
+        }
+    })
+
 @app.route('/api/inventory-availability', methods=['GET'])
 @login_required
 def inventory_availability():
@@ -1505,6 +1745,8 @@ def get_sales_forecast():
     date_start = request.args.get('date_start', '2023-01-01')
     date_end = request.args.get('date_end', datetime.now().strftime('%Y-%m-%d'))
     forecast_months = int(request.args.get('months', 6))  # Default 6 months ahead
+    model_type = request.args.get('model', 'linear').lower()
+    arima_order = request.args.get('arima_order', '1,1,1')
     stores = request.args.get('stores', '')
     categories = request.args.get('categories', '')
     regions = request.args.get('regions', '')
@@ -1558,56 +1800,87 @@ def get_sales_forecast():
         
         if df.empty or len(df) < 3:
             return jsonify({'error': 'Not enough data for forecasting. Need at least 3 months of data.'}), 400
-    
+
     # Prepare data for forecasting
+    df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month'].astype(str) + '-01')
+    df = df.sort_values('date')
     df['period'] = range(len(df))
     X = df[['period']].values
     y_revenue = df['revenue'].values
     y_profit = df['profit'].values
-    
-    # Simple linear regression for revenue
-    model_revenue = LinearRegression()
-    model_revenue.fit(X, y_revenue)
-    
-    # Polynomial regression for better fit (if enough data)
-    if len(df) >= 6:
-        poly_features = PolynomialFeatures(degree=2)
-        X_poly = poly_features.fit_transform(X)
-        model_revenue_poly = LinearRegression()
-        model_revenue_poly.fit(X_poly, y_revenue)
-    
-    # Forecast future periods
-    last_period = len(df) - 1
-    future_periods = range(last_period + 1, last_period + 1 + forecast_months)
-    future_X = np.array([[p] for p in future_periods])
-    
-    # Predict revenue
-    forecast_revenue = model_revenue.predict(future_X)
-    
-    # Predict profit (using same trend as revenue)
-    model_profit = LinearRegression()
-    model_profit.fit(X, y_profit)
-    forecast_profit = model_profit.predict(future_X)
-    
-    # Generate future dates
-    last_date = datetime.strptime(date_end, '%Y-%m-%d')
-    forecast_dates = []
-    current_date = last_date
-    
-    for i in range(forecast_months):
-        # Move to next month
-        if current_date.month == 12:
-            current_date = current_date.replace(year=current_date.year + 1, month=1, day=1)
-        else:
-            current_date = current_date.replace(month=current_date.month + 1, day=1)
-        forecast_dates.append(current_date.strftime('%Y-%m'))
-    
+
+    # Generate future dates based on last available data
+    last_date = df['date'].max()
+    forecast_dates = pd.date_range(last_date + pd.offsets.MonthBegin(1), periods=forecast_months, freq='MS')
+
+    forecast_revenue = None
+    forecast_profit = None
+    model_accuracy = {'revenue_r2': None, 'profit_r2': None}
+
+    if model_type == 'prophet':
+        if Prophet is None:
+            return jsonify({'error': 'Prophet is not installed. Install prophet to use this model.'}), 400
+        if len(df) < 3:
+            return jsonify({'error': 'Not enough data for Prophet. Need at least 3 months of data.'}), 400
+
+        prophet_df = df[['date', 'revenue']].rename(columns={'date': 'ds', 'revenue': 'y'})
+        prophet_profit_df = df[['date', 'profit']].rename(columns={'date': 'ds', 'profit': 'y'})
+
+        model_revenue = Prophet()
+        model_revenue.fit(prophet_df)
+        model_profit = Prophet()
+        model_profit.fit(prophet_profit_df)
+
+        future = model_revenue.make_future_dataframe(periods=forecast_months, freq='MS')
+        revenue_forecast = model_revenue.predict(future).tail(forecast_months)
+        profit_forecast = model_profit.predict(future).tail(forecast_months)
+
+        forecast_revenue = revenue_forecast['yhat'].values
+        forecast_profit = profit_forecast['yhat'].values
+    elif model_type == 'arima':
+        if ARIMA is None:
+            return jsonify({'error': 'statsmodels is not installed. Install statsmodels to use ARIMA.'}), 400
+        try:
+            order = tuple(int(x.strip()) for x in arima_order.split(','))
+            if len(order) != 3:
+                raise ValueError("Invalid ARIMA order")
+        except Exception:
+            return jsonify({'error': 'Invalid ARIMA order. Use format p,d,q (e.g., 1,1,1).'}), 400
+
+        model_revenue = ARIMA(y_revenue, order=order).fit()
+        model_profit = ARIMA(y_profit, order=order).fit()
+        forecast_revenue = model_revenue.forecast(steps=forecast_months)
+        forecast_profit = model_profit.forecast(steps=forecast_months)
+    else:
+        # Simple linear regression for revenue
+        model_revenue = LinearRegression()
+        model_revenue.fit(X, y_revenue)
+
+        # Forecast future periods
+        last_period = len(df) - 1
+        future_periods = range(last_period + 1, last_period + 1 + forecast_months)
+        future_X = np.array([[p] for p in future_periods])
+
+        # Predict revenue
+        forecast_revenue = model_revenue.predict(future_X)
+
+        # Predict profit (using same trend as revenue)
+        model_profit = LinearRegression()
+        model_profit.fit(X, y_profit)
+        forecast_profit = model_profit.predict(future_X)
+
+        model_accuracy = {
+            'revenue_r2': float(model_revenue.score(X, y_revenue)),
+            'profit_r2': float(model_profit.score(X, y_profit))
+        }
+
     # Combine historical and forecast
     historical = df[['year', 'month', 'month_name', 'revenue', 'profit']].to_dict(orient='records')
     
     forecast = []
-    for i, date_str in enumerate(forecast_dates):
-        year, month = date_str.split('-')
+    for i, date_val in enumerate(forecast_dates):
+        year = date_val.year
+        month = date_val.month
         month_names = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
                       'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
         forecast.append({
@@ -1622,10 +1895,8 @@ def get_sales_forecast():
     return jsonify({
         'historical': historical,
         'forecast': forecast,
-        'model_accuracy': {
-            'revenue_r2': float(model_revenue.score(X, y_revenue)),
-            'profit_r2': float(model_profit.score(X, y_profit))
-        }
+        'model_accuracy': model_accuracy,
+        'model_type': model_type
     })
 
 def build_where_clause(date_start, date_end, stores, categories, regions, restrict_to_store=False):
